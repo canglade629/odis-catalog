@@ -23,7 +23,7 @@ This document describes the **Silver layer** schema.
 | `gares` | Dimension | Railway stations | ~2,974 |
 | `lignes` | Dimension | Railway lines | ~933 |
 | `siae_structures` | Dimension | Social inclusion employment structures | ~1,976 |
-| `logement` | Fact | Housing prices by commune | ~34,915 |
+| `loyer_annonce` | Fact | Housing rental price announcements by commune | ~34,915 |
 | `zones_attraction` | Fact | Urban area influence zones | ~26,209 |
 | `siae_postes` | Fact | Job openings in SIAE structures | ~4,219 |
 
@@ -152,21 +152,32 @@ Every table includes:
 
 ---
 
-### 6. logement (Housing Prices)
+### 6. loyer_annonce (Housing Rental Price Announcements)
 
-**Purpose**: Predicted housing rent prices by commune.
+**Purpose**: Predicted housing rental price announcements by commune with quality indicators. Includes 2024 data with segmentation by housing type and typology.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `logement_sk` | STRING | **Surrogate key** (PK) |
+| `row_sk` | STRING | **Surrogate key** (PK) - For 2024 data: hash of commune+year+type+typology |
 | `commune_sk` | STRING | **FK** → `geo.commune_sk` |
-| `epci_code` | STRING | EPCI (intercommunal) code |
-| `loyer_predicted_m2` | DECIMAL | Predicted rent per m² |
-| `loyer_lower_bound_m2` | DECIMAL | Lower prediction bound |
-| `loyer_upper_bound_m2` | DECIMAL | Upper prediction bound |
-| `prediction_level` | STRING | Prediction quality level |
-| `code_departement` | STRING | Department code |
-| `code_region` | STRING | Region code |
+| `loyer_m2_moy` | DECIMAL | Average predicted rent per m² |
+| `loyer_m2_min` | DECIMAL | Lower prediction bound |
+| `loyer_m2_max` | DECIMAL | Upper prediction bound |
+| `maille_observation` | STRING | Observation level (commune/maille) |
+| `score_qualite` | DECIMAL | R² adjusted quality score |
+| `nb_observation_maille` | INTEGER | Number of observations in grid |
+| `nb_observation_commune` | INTEGER | Number of observations in commune |
+| `annee` | INTEGER | **NEW 2024**: Reference year (2024 for new data, NULL for legacy) |
+| `type_bien` | STRING | **NEW 2024**: Housing type ('appartement' or 'maison') |
+| `segment_typologie` | STRING | **NEW 2024**: Typology segment ('toutes typologies', 'T1 et T2', 'T3 et plus') |
+| `surface_ref` | DECIMAL | **NEW 2024**: Reference surface in m² for this segment |
+| `surface_piece_moy` | DECIMAL | **NEW 2024**: Average surface per room in m² |
+
+**Note**: 
+- Geographic details (department, region, EPCI) are obtained by joining with `geo` via `commune_sk`.
+- **2024 Enhancement**: Data now includes segmentation by housing type (appartement/maison) and typology (T1-T2, T3+, all types).
+- The `row_sk` for 2024 data includes commune + year + type + typology to ensure uniqueness across segments.
+- Legacy data has NULL values for the new 2024 columns (`annee`, `type_bien`, `segment_typologie`, `surface_ref`, `surface_piece_moy`).
 
 ---
 
@@ -225,9 +236,9 @@ Most tables connect through the **`geo`** table using `commune_sk`:
          ┌─────────────────┼─────────────────┐
          │                 │                 │
          ▼                 ▼                 ▼
-  ┌──────────┐      ┌──────────┐    ┌──────────────┐
-  │ logement │      │  gares   │    │    siae      │
-  └──────────┘      └──────────┘    │  structures  │
+  ┌──────────────┐  ┌──────────┐    ┌──────────────┐
+  │loyer_annonce │  │  gares   │    │    siae      │
+  └──────────────┘  └──────────┘    │  structures  │
                                      └──────┬───────┘
                              │
                              ▼
@@ -245,11 +256,44 @@ Most tables connect through the **`geo`** table using `commune_sk`:
 SELECT 
     g.commune_label,
     g.departement_code,
-    l.loyer_predicted_m2
+    l.loyer_m2_moy
 FROM silver_geo g
-JOIN silver_logement l ON l.commune_sk = g.commune_sk
+JOIN silver_loyer_annonce l ON l.commune_sk = g.commune_sk
 WHERE g.departement_code = '75'
-ORDER BY l.loyer_predicted_m2 DESC;
+ORDER BY l.loyer_m2_moy DESC;
+```
+
+#### 1b. Housing Prices by Type and Typology (2024 Data)
+
+```sql
+-- Compare rental prices by housing type in a department
+SELECT 
+    g.commune_label,
+    l.type_bien,
+    l.segment_typologie,
+    l.loyer_m2_moy,
+    l.surface_ref
+FROM silver_geo g
+JOIN silver_loyer_annonce l ON l.commune_sk = g.commune_sk
+WHERE g.departement_code = '75'
+  AND l.annee = 2024
+ORDER BY l.type_bien, l.segment_typologie, l.loyer_m2_moy DESC;
+```
+
+#### 1c. Average Rent by Housing Segment
+
+```sql
+-- Compare rental prices across different housing segments nationwide
+SELECT 
+    l.type_bien,
+    l.segment_typologie,
+    ROUND(AVG(l.loyer_m2_moy), 2) as loyer_moyen,
+    ROUND(AVG(l.surface_ref), 1) as surface_ref_moyenne,
+    COUNT(*) as nb_communes
+FROM silver_loyer_annonce l
+WHERE l.annee = 2024
+GROUP BY l.type_bien, l.segment_typologie
+ORDER BY l.type_bien, l.segment_typologie;
 ```
 
 #### 2. SIAE Jobs with Structure Details
@@ -303,15 +347,40 @@ ORDER BY total_postes DESC;
 ```sql
 SELECT 
     g.commune_label,
-    l.loyer_predicted_m2,
+    l.loyer_m2_moy,
     COUNT(s.siae_structure_sk) as nb_siae
 FROM silver_geo g
-JOIN silver_logement l ON l.commune_sk = g.commune_sk
+JOIN silver_loyer_annonce l ON l.commune_sk = g.commune_sk
 JOIN silver_siae_structures s ON s.commune_sk = g.commune_sk
-WHERE l.loyer_predicted_m2 < 10.0
-GROUP BY g.commune_label, l.loyer_predicted_m2
+WHERE l.loyer_m2_moy < 10.0
+GROUP BY g.commune_label, l.loyer_m2_moy
 HAVING COUNT(s.siae_structure_sk) > 0
-ORDER BY nb_siae DESC, l.loyer_predicted_m2 ASC;
+ORDER BY nb_siae DESC, l.loyer_m2_moy ASC;
+```
+
+### Find Communes with SIAE and Affordable Housing by Type (2024)
+
+```sql
+-- Find communes with SIAE structures and affordable apartments for different household sizes
+SELECT 
+    g.commune_label,
+    g.departement_code,
+    l.type_bien,
+    l.segment_typologie,
+    l.loyer_m2_moy,
+    l.surface_ref,
+    ROUND(l.loyer_m2_moy * l.surface_ref, 2) as loyer_total_estime,
+    COUNT(DISTINCT s.siae_structure_sk) as nb_siae
+FROM silver_geo g
+JOIN silver_loyer_annonce l ON l.commune_sk = g.commune_sk
+JOIN silver_siae_structures s ON s.commune_sk = g.commune_sk
+WHERE l.annee = 2024
+  AND l.type_bien = 'appartement'
+  AND l.loyer_m2_moy * l.surface_ref < 600  -- Total rent < 600€
+GROUP BY g.commune_label, g.departement_code, l.type_bien, l.segment_typologie, 
+         l.loyer_m2_moy, l.surface_ref
+HAVING COUNT(DISTINCT s.siae_structure_sk) > 0
+ORDER BY loyer_total_estime ASC, nb_siae DESC;
 ```
 
 ### Transport Accessibility
@@ -357,7 +426,7 @@ All tables are **deduplicated** in the Silver layer:
 | `accueillants` | `commune_sk` | `geo.commune_sk` |
 | `gares` | `commune_sk` | `geo.commune_sk` |
 | `siae_structures` | `commune_sk` | `geo.commune_sk` |
-| `logement` | `commune_sk` | `geo.commune_sk` |
+| `loyer_annonce` | `commune_sk` | `geo.commune_sk` |
 | `zones_attraction` | `commune_sk` | `geo.commune_sk` |
 | `zones_attraction` | `commune_pole_sk` | `geo.commune_sk` |
 | `siae_postes` | `siae_structure_sk` | `siae_structures.siae_structure_sk` |
@@ -386,5 +455,5 @@ The Silver layer provides **8 clean, join-ready tables** with:
 
 ---
 
-*Last updated: December 3, 2025*  
-*Schema version: Silver V2*
+*Last updated: December 5, 2025*  
+*Schema version: Silver V2 - Added 2024 logement data segmentation*

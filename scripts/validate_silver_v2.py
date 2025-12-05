@@ -33,7 +33,7 @@ class SilverV2Validator:
         'gares': 'dim_gare',
         'lignes': 'dim_ligne',
         'siae_structures': 'dim_siae_structure',
-        'logement': 'fact_logement',
+        'logement': 'fact_loyer_annonce',
         'zones_attraction': 'fact_zone_attraction',
         'siae_postes': 'fact_siae_poste'
     }
@@ -45,7 +45,7 @@ class SilverV2Validator:
         'dim_gare': 'gare_sk',
         'dim_ligne': 'ligne_sk',
         'dim_siae_structure': 'siae_structure_sk',
-        'fact_logement': 'logement_sk',
+        'fact_loyer_annonce': 'row_sk',
         'fact_zone_attraction': 'zone_attraction_sk',
         'fact_siae_poste': 'siae_poste_sk'
     }
@@ -55,7 +55,7 @@ class SilverV2Validator:
         'dim_accueillant': ['commune_sk'],
         'dim_gare': ['commune_sk'],
         'dim_siae_structure': ['commune_sk'],
-        'fact_logement': ['commune_sk'],
+        'fact_loyer_annonce': ['commune_sk'],
         'fact_zone_attraction': ['commune_sk', 'commune_pole_sk'],
         'fact_siae_poste': ['siae_structure_sk']
     }

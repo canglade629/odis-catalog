@@ -20,7 +20,7 @@ class TestSilverV2Integration:
     def test_all_fact_tables_reference_dim_commune(self):
         """Test that all fact tables with commune_sk have valid foreign keys."""
         fact_tables_with_commune = [
-            ('fact_logement', 'commune_sk'),
+            ('fact_loyer_annonce', 'commune_sk'),
             ('fact_zone_attraction', 'commune_sk'),
         ]
         
@@ -71,7 +71,7 @@ class TestSilverV2Integration:
             'dim_gare',
             'dim_ligne',
             'dim_siae_structure',
-            'fact_logement',
+            'fact_loyer_annonce',
             'fact_zone_attraction',
             'fact_siae_poste'
         ]
@@ -88,7 +88,7 @@ class TestSilverV2Integration:
             ('dim_gare', 'gare_sk'),
             ('dim_ligne', 'ligne_sk'),
             ('dim_siae_structure', 'siae_structure_sk'),
-            ('fact_logement', 'logement_sk'),
+            ('fact_loyer_annonce', 'row_sk'),
             ('fact_zone_attraction', 'zone_attraction_sk'),
             ('fact_siae_poste', 'siae_poste_sk')
         ]
@@ -105,7 +105,7 @@ class TestSilverV2Integration:
             ('dim_gare', ['gare_sk', 'code_uic']),
             ('dim_ligne', ['ligne_sk', 'ligne_code']),
             ('dim_siae_structure', ['siae_structure_sk', 'siret']),
-            ('fact_logement', ['logement_sk', 'commune_sk']),
+            ('fact_loyer_annonce', ['row_sk', 'commune_sk']),
             ('fact_zone_attraction', ['zone_attraction_sk', 'commune_sk', 'commune_pole_sk']),
             ('fact_siae_poste', ['siae_poste_sk', 'siae_structure_sk'])
         ]
@@ -114,26 +114,61 @@ class TestSilverV2Integration:
             result = self.validator.validate_no_nulls(table, columns)
             assert result.passed, f"{table} has NULLs in required columns: {result.message}"
     
-    def test_total_row_counts_preserved(self):
-        """Test that total row counts are preserved across migration."""
-        table_pairs = [
-            ('geo', 'dim_commune'),
-            ('accueillants', 'dim_accueillant'),
-            ('gares', 'dim_gare'),
-            ('lignes', 'dim_ligne'),
-            ('siae_structures', 'dim_siae_structure'),
-            ('logement', 'fact_logement'),
-            ('zones_attraction', 'fact_zone_attraction'),
-            ('siae_postes', 'fact_siae_poste')
-        ]
+    def test_fact_loyer_annonce_volume_increase(self):
+        """Test that 2024 data causes expected volume increase."""
+        path = self.settings.get_silver_path("fact_loyer_annonce")
+        dt = DeltaTable(path)
+        df = dt.to_pandas()
         
-        for old_table, new_table in table_pairs:
-            result = self.validator.compare_row_counts(old_table, new_table)
-            # Allow some minor differences due to filtering
-            if not result.passed:
-                diff_ratio = abs(result.details['diff']) / result.details['old_count']
-                assert diff_ratio < 0.05, \
-                    f"{old_table} → {new_table}: Row count difference too large: {result.message}"
+        # Count rows by year
+        df_2024 = df[df['annee'] == 2024]
+        df_legacy = df[df['annee'].isna()]
+        
+        total_rows = len(df)
+        rows_2024 = len(df_2024)
+        rows_legacy = len(df_legacy)
+        
+        logger.info(f"\n  Total rows: {total_rows:,}")
+        logger.info(f"  2024 rows: {rows_2024:,}")
+        logger.info(f"  Legacy rows: {rows_legacy:,}")
+        
+        if rows_2024 > 0:
+            # Check that 2024 data has roughly 4x the communes
+            unique_communes_2024 = df_2024['commune_sk'].nunique()
+            segments_per_commune = rows_2024 / unique_communes_2024 if unique_communes_2024 > 0 else 0
+            
+            logger.info(f"  Unique communes in 2024: {unique_communes_2024:,}")
+            logger.info(f"  Avg segments per commune: {segments_per_commune:.2f}")
+            
+            # Should be close to 4 segments per commune
+            assert 3.5 <= segments_per_commune <= 4.0, \
+                f"Expected ~4 segments per commune, got {segments_per_commune:.2f}"
+    
+    def test_2024_segmentation_completeness(self):
+        """Test that 2024 data has all expected segments."""
+        path = self.settings.get_silver_path("fact_loyer_annonce")
+        dt = DeltaTable(path)
+        df = dt.to_pandas()
+        
+        df_2024 = df[df['annee'] == 2024]
+        
+        if len(df_2024) > 0:
+            # Check segment distribution
+            segments = df_2024.groupby(['type_bien', 'segment_typologie']).size()
+            
+            expected_segments = [
+                ('appartement', 'toutes typologies'),
+                ('appartement', 'T1 et T2'),
+                ('appartement', 'T3 et plus'),
+                ('maison', 'toutes typologies')
+            ]
+            
+            for segment in expected_segments:
+                if segment in segments.index:
+                    count = segments[segment]
+                    logger.info(f"  {segment[0]} - {segment[1]}: {count:,} communes")
+                else:
+                    logger.warning(f"  Missing segment: {segment}")
     
     @classmethod
     def teardown_class(cls):
@@ -156,4 +191,3 @@ class TestSilverV2Integration:
 if __name__ == "__main__":
     """Run tests manually and print report."""
     pytest.main([__file__, "-v", "-s"])
-

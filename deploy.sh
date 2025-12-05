@@ -4,7 +4,7 @@ set -e
 # Configuration
 PROJECT_ID="icc-project-472009"
 REGION="europe-west1"
-SERVICE_NAME="odace-backend"
+SERVICE_NAME="odace-pipeline"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 TAG="latest"
 

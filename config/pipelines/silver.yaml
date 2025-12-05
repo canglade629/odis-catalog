@@ -32,11 +32,11 @@ pipelines:
     pipeline_class: "app.pipelines.silver.dim_siae_structure.DimSIAEStructurePipeline"
     description_fr: "Table de dimension des structures d'insertion par l'activité économique (SIAE) avec enrichissement géographique (FK vers dim_commune) et informations de contact."
     
-  - name: "fact_logement"
-    target_table: "fact_logement"
+  - name: "fact_loyer_annonce"
+    target_table: "fact_loyer_annonce"
     dependencies: ["bronze.logement", "silver.dim_commune"]
-    pipeline_class: "app.pipelines.silver.fact_logement.FactLogementPipeline"
-    description_fr: "Table de faits des loyers prédits au m² par commune avec bornes de prédiction et niveau de qualité. FK vers dim_commune."
+    pipeline_class: "app.pipelines.silver.fact_loyer_annonce.FactLoyerAnnoncePipeline"
+    description_fr: "Table de faits des loyers d'annonce au m² par commune avec bornes de prédiction, niveau d'observation et indicateurs de qualité. FK vers dim_commune."
     
   - name: "fact_zone_attraction"
     target_table: "fact_zone_attraction"

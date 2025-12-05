@@ -1054,6 +1054,23 @@ button, .btn {
     color: var(--primary);
 }
 
+.field-description {
+    max-width: 500px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.field-example {
+    display: inline-block;
+    margin-top: 4px;
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+.field-example code {
+    font-size: 0.8rem;
+    background: var(--bg-primary);
+}
 
 
 .preview-data {

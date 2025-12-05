@@ -1497,6 +1497,7 @@
                                     <th>Colonne</th>
                                     <th>Type</th>
                                     <th>Nullable</th>
+                                    <th>Description</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1505,6 +1506,10 @@
                                         <td><strong>${field.name}</strong></td>
                                         <td><code>${field.type}</code></td>
                                         <td>${field.nullable ? '✓' : '✗'}</td>
+                                        <td class="field-description">
+                                            ${field.description || '<i>Aucune description disponible</i>'}
+                                            ${field.example ? `<br><small class="field-example">Exemple: <code>${field.example}</code></small>` : ''}
+                                        </td>
                                     </tr>
                                 `).join('')}
                             </tbody>

@@ -96,21 +96,21 @@ region_label        -- ❌ Dépend de region_code, pas de commune_sk
 
 **Exemple de problème:**
 ```sql
--- ❌ MAUVAIS: fact_logement avec dépendances transitives
-logement_sk
+-- ❌ MAUVAIS: fact_loyer_annonce avec dépendances transitives
+row_sk
 commune_code        -- Identifie la commune
 commune_label       -- ❌ Dépend de commune_code (transitive)
 departement_code    -- ❌ Dépend de commune_code (transitive)
 departement_label   -- ❌ Dépend de departement_code (transitive)
-loyer_predicted_m2
+loyer_m2_moy
 ```
 
 **Solution (normalisé):**
 ```sql
--- ✅ CORRECT: fact_logement normalisé
-logement_sk
+-- ✅ CORRECT: fact_loyer_annonce normalisé
+row_sk
 commune_sk          -- FK vers dim_commune
-loyer_predicted_m2
+loyer_m2_moy
 -- Tous les autres attributs géographiques viennent de dim_commune via la FK
 ```
 
@@ -138,10 +138,10 @@ commune_code
 commune_label       -- Stocké UNE SEULE FOIS
 departement_code
 
--- fact_logement
-logement_sk
+-- fact_loyer_annonce
+row_sk
 commune_sk          -- ✅ Référence via FK
-loyer_predicted_m2
+loyer_m2_moy
 
 -- fact_zone_attraction
 zone_attraction_sk
@@ -151,8 +151,8 @@ aire_attraction_code
 
 **❌ Incorrect:**
 ```sql
--- fact_logement
-logement_sk
+-- fact_loyer_annonce
+row_sk
 commune_code
 commune_label       -- ❌ Dupliqué
 
@@ -309,7 +309,7 @@ ville, code_postal, latitude, modify_date_utc, count_observations
 **Exemples entités domaine vs opérations:**
 ```sql
 -- Entités du domaine → Français
-loyer_predicted_m2, commune_label, logement_sk, proprietaire_sk
+loyer_m2_moy, commune_label, row_sk, proprietaire_sk
 
 -- Opérations/attributs → Anglais
 predicted, observed, lower_bound, upper_bound, count_observations
@@ -340,7 +340,7 @@ commune_sk SERIAL PRIMARY KEY
 
 **Format des clés:**
 - Dimensions: `<nom_dimension>_sk` (ex: `commune_sk`, `gare_sk`)
-- Faits: `<nom_fait>_sk` (ex: `logement_sk`, `zone_attraction_sk`)
+- Faits: `<nom_fait>_sk` (ex: `row_sk`, `zone_attraction_sk`)
 
 ---
 
@@ -415,12 +415,12 @@ epci_code VARCHAR(9) NOT NULL     -- Code EPCI officiel
 
 ---
 
-### TABLE: `logement` → `FACT_LOGEMENT`
+### TABLE: `logement` → `FACT_LOYER_ANNONCE`
 
 **Instructions:**
 
-1. [ ] Renommer la table: `logement` → `fact_logement`
-2. [ ] Ajouter `logement_sk` (clé de substitution)
+1. [ ] Renommer la table: `logement` → `fact_loyer_annonce`
+2. [ ] Ajouter `row_sk` (clé de substitution)
 3. [ ] Passer toutes les colonnes en lowercase
 4. [ ] Ajouter `commune_sk` via jointure avec `dim_commune` sur `code_commune`
 5. [ ] Renommer les colonnes selon conventions (français pour métier):

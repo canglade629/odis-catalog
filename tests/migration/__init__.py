@@ -1,2 +1,2 @@
-"""Migration validation tests for Silver V2."""
+"""__init__.py for migration tests."""
 

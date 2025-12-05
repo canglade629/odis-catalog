@@ -21,7 +21,7 @@ from app.pipelines.silver_v2.dim_accueillant import DimAccueillantPipeline
 from app.pipelines.silver_v2.dim_gare import DimGarePipeline
 from app.pipelines.silver_v2.dim_ligne import DimLignePipeline
 from app.pipelines.silver_v2.dim_siae_structure import DimSIAEStructurePipeline
-from app.pipelines.silver_v2.fact_logement import FactLogementPipeline
+from app.pipelines.silver_v2.fact_loyer_annonce import FactLoyerAnnoncePipeline
 from app.pipelines.silver_v2.fact_zone_attraction import FactZoneAttractionPipeline
 from app.pipelines.silver_v2.fact_siae_poste import FactSIAEPostePipeline
 
@@ -41,7 +41,7 @@ def run_silver_cutover():
         ("dim_gare (gares)", DimGarePipeline),
         ("dim_ligne (lignes)", DimLignePipeline),
         ("dim_siae_structure (siae_structures)", DimSIAEStructurePipeline),
-        ("fact_logement (logement)", FactLogementPipeline),
+        ("fact_loyer_annonce (logement)", FactLoyerAnnoncePipeline),
         ("fact_zone_attraction (zones_attraction)", FactZoneAttractionPipeline),
         ("fact_siae_poste (siae_postes)", FactSIAEPostePipeline),
     ]

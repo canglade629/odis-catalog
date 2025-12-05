@@ -2,4 +2,6 @@
 alwaysApply: true
 ---
 
-Keep documentation clean in a single README, and in single documentation .md per folder (pipelines, front end etc...)
+Keep documentation clean in a single README, and in single documentation .md per folder (pipelines, front end etc...).
+
+When creating new silver tables, you should keep the yaml configuration files up to date (table, field description etc...)

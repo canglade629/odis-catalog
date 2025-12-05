@@ -6,7 +6,7 @@ Order:
 1. dim_commune (no dependencies)
 2. dim_accueillant, dim_gare, dim_ligne (depend on dim_commune, can run in parallel)
 3. dim_siae_structure (depends on dim_commune)
-4. fact_logement, fact_zone_attraction (depend on dim_commune)
+4. fact_loyer_annonce, fact_zone_attraction (depend on dim_commune)
 5. fact_siae_poste (depends on dim_siae_structure)
 """
 import sys
@@ -24,7 +24,7 @@ from app.pipelines.silver_v2.dim_accueillant import DimAccueillantPipeline
 from app.pipelines.silver_v2.dim_gare import DimGarePipeline
 from app.pipelines.silver_v2.dim_ligne import DimLignePipeline
 from app.pipelines.silver_v2.dim_siae_structure import DimSIAEStructurePipeline
-from app.pipelines.silver_v2.fact_logement import FactLogementPipeline
+from app.pipelines.silver_v2.fact_loyer_annonce import FactLoyerAnnoncePipeline
 from app.pipelines.silver_v2.fact_zone_attraction import FactZoneAttractionPipeline
 from app.pipelines.silver_v2.fact_siae_poste import FactSIAEPostePipeline
 
@@ -98,7 +98,7 @@ def main():
     
     # Phase 3: Fact Tables
     logger.info("\n📌 PHASE 3: Fact Tables")
-    results.append(run_pipeline(FactLogementPipeline, "fact_logement"))
+    results.append(run_pipeline(FactLoyerAnnoncePipeline, "fact_loyer_annonce"))
     results.append(run_pipeline(FactZoneAttractionPipeline, "fact_zone_attraction"))
     results.append(run_pipeline(FactSIAEPostePipeline, "fact_siae_poste"))
     

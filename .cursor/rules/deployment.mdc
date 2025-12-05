@@ -6,3 +6,5 @@ Our main front end should be deployed in Cloud run in a single service. The back
 All deployements should be done through Terraform. Don't forget to update those terraform scripts if needed when developing new features.
 
 Always build docker images locally and not in Cloud Build. Then push to cloud run.
+
+Deploy to the existing Cloud Run service odace-pipeline

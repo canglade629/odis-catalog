@@ -1,6 +1,8 @@
 """Data catalog API routes."""
 import logging
 import time
+import yaml
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
@@ -15,6 +17,29 @@ from app.core.models import PipelineLayer
 from fastapi import Request
 
 logger = logging.getLogger(__name__)
+
+# Load data catalogue with field descriptions
+def load_data_catalogue() -> Dict[str, Any]:
+    """Load the data catalogue YAML file with field descriptions."""
+    try:
+        # Try multiple possible paths
+        possible_paths = [
+            Path(__file__).parent.parent.parent / "config" / "data_catalogue.yaml",  # From app/api/routes/
+            Path("/app/config/data_catalogue.yaml"),  # Docker absolute path
+            Path("config/data_catalogue.yaml"),  # Relative from working directory
+        ]
+        
+        for catalogue_path in possible_paths:
+            if catalogue_path.exists():
+                logger.info(f"Loading data catalogue from {catalogue_path}")
+                with open(catalogue_path, 'r', encoding='utf-8') as f:
+                    return yaml.safe_load(f)
+        
+        logger.warning(f"Data catalogue not found in any of: {[str(p) for p in possible_paths]}")
+        return {"tables": {}}
+    except Exception as e:
+        logger.error(f"Error loading data catalogue: {e}")
+        return {"tables": {}}
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
@@ -31,6 +56,8 @@ class SchemaField(BaseModel):
     name: str
     type: str
     nullable: bool
+    description: Optional[str] = None
+    example: Optional[str] = None
 
 
 class TableSchema(BaseModel):
@@ -234,12 +261,21 @@ async def get_silver_table_detail(
         table_path = f"{settings.delta_path}/silver/{table_name}"
         schema_info = DeltaOperations.get_table_schema(table_path)
         
+        # Load field descriptions from data catalogue
+        catalogue = load_data_catalogue()
+        logger.info(f"Loaded catalogue with {len(catalogue.get('tables', {}))} tables")
+        table_catalogue = catalogue.get("tables", {}).get(table_name, {})
+        field_descriptions = table_catalogue.get("fields", {})
+        logger.info(f"Found {len(field_descriptions)} field descriptions for {table_name}")
+        
         table_schema = TableSchema(
             fields=[
                 SchemaField(
                     name=field["name"],
                     type=field["type"],
-                    nullable=field["nullable"]
+                    nullable=field["nullable"],
+                    description=field_descriptions.get(field["name"], {}).get("description"),
+                    example=str(field_descriptions.get(field["name"], {}).get("example", "")) if field_descriptions.get(field["name"], {}).get("example") else None
                 )
                 for field in schema_info["fields"]
             ],
