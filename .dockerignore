@@ -21,7 +21,6 @@ ENV/
 *.ipynb
 .ipynb_checkpoints
 terraform/
-scripts/
 *.plan.md
 job/
 

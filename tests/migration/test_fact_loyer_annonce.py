@@ -199,7 +199,7 @@ class TestFactLoyerAnnonceMigration:
             sk_string = f"{row['commune_sk']}|{int(row['annee'])}|{row['type_bien']}|{row['segment_typologie']}"
             expected_sk = hashlib.md5(sk_string.encode()).hexdigest()
             
-            # Note: We can't validate exact match since we don't have commune_code,
+            # Note: We can't validate exact match since we don't have commune_insee_code,
             # but we can check that different segments have different SKs
             pass  # This test verifies the logic exists
     

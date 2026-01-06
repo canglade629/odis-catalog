@@ -1,44 +1,107 @@
 """Data catalog API routes."""
 import logging
 import time
-import yaml
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
+from google.cloud import firestore
 
-from app.core.auth import verify_api_key
+from app.core.auth import verify_api_key, verify_admin_secret, get_firestore_client, verify_api_key_or_admin
 from app.core.config import get_settings
 from app.utils.delta_ops import DeltaOperations
 from app.utils.sql_executor import SQLExecutor
 from app.core.rate_limiter import limiter
 from app.core.pipeline_registry import get_registry
 from app.core.models import PipelineLayer
-from fastapi import Request
+from app.core.certification_manager import is_table_certified, get_certification_status
 
 logger = logging.getLogger(__name__)
 
-# Load data catalogue with field descriptions
-def load_data_catalogue() -> Dict[str, Any]:
-    """Load the data catalogue YAML file with field descriptions."""
+security = HTTPBearer(auto_error=False)
+
+
+async def check_admin_or_raise(credentials: Optional[HTTPAuthorizationCredentials]) -> bool:
+    """
+    Check if request has valid admin credentials.
+    Returns True if admin, False otherwise (doesn't raise).
+    """
+    if not credentials:
+        return False
+    
     try:
-        # Try multiple possible paths
-        possible_paths = [
-            Path(__file__).parent.parent.parent / "config" / "data_catalogue.yaml",  # From app/api/routes/
-            Path("/app/config/data_catalogue.yaml"),  # Docker absolute path
-            Path("config/data_catalogue.yaml"),  # Relative from working directory
-        ]
+        from app.core.config import get_settings
+        settings = get_settings()
+        return credentials.credentials == settings.admin_secret
+    except:
+        return False
+
+
+async def verify_table_access(
+    layer: str,
+    table_name: str,
+    db: firestore.AsyncClient,
+    credentials: Optional[HTTPAuthorizationCredentials] = None
+) -> None:
+    """
+    Verify that the user has access to the specified table.
+    
+    - Admins can access any table
+    - Regular users can only access certified silver tables
+    - Bronze and gold tables require admin access
+    
+    Raises HTTPException if access is denied.
+    """
+    # Check if user is admin
+    is_admin = await check_admin_or_raise(credentials)
+    
+    # Admins can access everything
+    if is_admin:
+        return
+    
+    # Only silver tables can be accessed by non-admins (if certified)
+    if layer != "silver":
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access to {layer} tables requires admin privileges"
+        )
+    
+    # Check if the silver table is certified
+    certified = await is_table_certified(layer, table_name, db)
+    
+    if not certified:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Table {table_name} is not certified for public use. Please contact an administrator."
+        )
+
+async def load_catalogue_from_firestore(db: firestore.AsyncClient) -> Dict[str, Any]:
+    """
+    Load the data catalogue from Firestore.
+    
+    This is much faster than reading from YAML file and making GCS calls.
+    Falls back to empty catalogue if not found.
+    
+    Args:
+        db: Firestore async client
+    
+    Returns:
+        Catalogue data dict with 'tables' key
+    """
+    try:
+        doc_ref = db.collection('data_catalogue').document('silver_tables')
+        doc = await doc_ref.get()
         
-        for catalogue_path in possible_paths:
-            if catalogue_path.exists():
-                logger.info(f"Loading data catalogue from {catalogue_path}")
-                with open(catalogue_path, 'r', encoding='utf-8') as f:
-                    return yaml.safe_load(f)
-        
-        logger.warning(f"Data catalogue not found in any of: {[str(p) for p in possible_paths]}")
-        return {"tables": {}}
+        if doc.exists:
+            data = doc.to_dict()
+            logger.info(f"Loaded catalogue from Firestore with {len(data.get('tables', {}))} tables")
+            return data
+        else:
+            logger.warning("Catalogue document not found in Firestore")
+            return {"tables": {}}
     except Exception as e:
-        logger.error(f"Error loading data catalogue: {e}")
+        logger.error(f"Error loading catalogue from Firestore: {e}")
         return {"tables": {}}
 
 router = APIRouter(prefix="/api/data", tags=["data"])
@@ -119,11 +182,23 @@ class SilverTableInfo(BaseModel):
     dependencies: List[str]
     version: int
     row_count: Optional[int]
+    certified: bool = False
+    certified_at: Optional[str] = None
+    certified_by: Optional[str] = None
+    query_count: Optional[int] = 0
 
 
 class SilverCatalogResponse(BaseModel):
     """Catalog response for silver tables only."""
     tables: List[SilverTableInfo]
+
+
+class CatalogueRefreshResponse(BaseModel):
+    """Response from catalogue refresh operation."""
+    status: str
+    tables_synced: int
+    last_synced: str
+    version: str
 
 
 class SilverTableDetail(BaseModel):
@@ -133,11 +208,14 @@ class SilverTableDetail(BaseModel):
     dependencies: List[str]
     schema: TableSchema
     preview: List[Dict[str, Any]]
+    certified: bool = False
+    certified_at: Optional[str] = None
+    certified_by: Optional[str] = None
 
 
 @router.get("/catalog", response_model=CatalogResponse)
 @limiter.limit("30/minute")
-async def get_catalog(request: Request, api_key: str = Depends(verify_api_key)):
+async def get_catalog(request: Request, user_id: str = Depends(verify_api_key_or_admin)):
     """
     Get the complete data catalog with all schemas and tables.
     
@@ -175,51 +253,60 @@ async def get_catalog(request: Request, api_key: str = Depends(verify_api_key)):
 
 @router.get("/catalog/silver", response_model=SilverCatalogResponse)
 @limiter.limit("30/minute")
-async def get_silver_catalog(request: Request, api_key: str = Depends(verify_api_key)):
+async def get_silver_catalog(
+    request: Request,
+    user_id: str = Depends(verify_api_key_or_admin),
+    db: firestore.AsyncClient = Depends(get_firestore_client)
+):
     """
     Get catalog of silver tables with French descriptions.
     
     Returns all silver layer tables with their French descriptions, dependencies,
     and basic metadata. Uses direct table names (dim_*, fact_*).
+    
+    Reads entirely from Firestore cache - NO GCS calls for maximum speed.
     """
     logger.info("Fetching silver catalog with French descriptions")
-    settings = get_settings()
     registry = get_registry()
     
     try:
+        # Import query tracker
+        from app.utils.query_tracker import get_table_query_count
+        
+        # Load catalogue from Firestore (fast!)
+        catalogue = await load_catalogue_from_firestore(db)
+        catalogue_tables = catalogue.get('tables', {})
+        
         # Get all silver pipelines from registry
         silver_pipelines = registry.list_pipelines(layer=PipelineLayer.SILVER)
-        
-        # Get Delta table information from silver directory
-        layer_path = f"{settings.delta_path}/silver"
-        try:
-            delta_tables = {t["name"]: t for t in DeltaOperations.list_delta_tables(layer_path)}
-        except Exception as e:
-            logger.warning(f"Could not list tables in silver: {e}")
-            delta_tables = {}
         
         tables = []
         for pipeline in silver_pipelines:
             # Pipeline name is now the same as the table name (dim_*, fact_*)
             table_name = pipeline.name
-            delta_info = delta_tables.get(table_name, {})
             
-            # Get row count from table
-            row_count = None
-            try:
-                table_path = f"{layer_path}/{table_name}"
-                schema_info = DeltaOperations.get_table_schema(table_path)
-                row_count = schema_info.get("row_count")
-            except Exception as e:
-                logger.warning(f"Could not get row count for {table_name}: {e}")
+            # Get all metadata from cached catalogue (no GCS calls!)
+            catalogue_info = catalogue_tables.get(table_name, {})
+            row_count = catalogue_info.get("row_count")
+            version = catalogue_info.get("schema", {}).get("version", 0)
+            
+            # Get certification status from Firestore (fast)
+            cert_status = await get_certification_status("silver", table_name, db)
+            
+            # Get query count from Firestore
+            query_count = await get_table_query_count(db, f"silver_{table_name}")
             
             tables.append(SilverTableInfo(
                 name=table_name,
                 actual_table_name=table_name,
                 description_fr=pipeline.description_fr or "Description non disponible",
                 dependencies=pipeline.dependencies,
-                version=delta_info.get("version", 0),
-                row_count=row_count
+                version=version,
+                row_count=row_count,
+                certified=cert_status is not None and cert_status.get("certified", False),
+                certified_at=cert_status.get("certified_at") if cert_status else None,
+                certified_by=cert_status.get("certified_by") if cert_status else None,
+                query_count=query_count
             ))
         
         return SilverCatalogResponse(tables=tables)
@@ -234,19 +321,19 @@ async def get_silver_catalog(request: Request, api_key: str = Depends(verify_api
 async def get_silver_table_detail(
     request: Request,
     table_name: str,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin),
+    db: firestore.AsyncClient = Depends(get_firestore_client)
 ):
     """
     Get detailed information about a specific silver table.
     
     Returns table metadata, schema, French description, dependencies,
-    and first 10 rows of data.
+    and first 10 rows of data. All data is cached in Firestore for fast access.
     
     Args:
         table_name: Name of the silver table
     """
     logger.info(f"Fetching details for silver.{table_name}")
-    settings = get_settings()
     registry = get_registry()
     
     try:
@@ -257,48 +344,55 @@ async def get_silver_table_detail(
         if not pipeline_info:
             raise HTTPException(status_code=404, detail=f"Table {table_name} not found in registry")
         
-        # Get table schema from silver directory
-        table_path = f"{settings.delta_path}/silver/{table_name}"
-        schema_info = DeltaOperations.get_table_schema(table_path)
+        # Load enriched catalogue from Firestore (includes schema + preview)
+        catalogue = await load_catalogue_from_firestore(db)
+        logger.info(f"Loaded enriched catalogue from Firestore with {len(catalogue.get('tables', {}))} tables")
         
-        # Load field descriptions from data catalogue
-        catalogue = load_data_catalogue()
-        logger.info(f"Loaded catalogue with {len(catalogue.get('tables', {}))} tables")
         table_catalogue = catalogue.get("tables", {}).get(table_name, {})
+        
+        if not table_catalogue:
+            raise HTTPException(status_code=404, detail=f"Table {table_name} not found in catalogue")
+        
+        # Extract schema from cached data
+        cached_schema = table_catalogue.get('schema', {})
         field_descriptions = table_catalogue.get("fields", {})
-        logger.info(f"Found {len(field_descriptions)} field descriptions for {table_name}")
+        
+        # Build schema with descriptions merged in
+        fields = []
+        for field in cached_schema.get('fields', []):
+            field_name = field['name']
+            field_desc_info = field_descriptions.get(field_name, {})
+            
+            fields.append(SchemaField(
+                name=field_name,
+                type=field['type'],
+                nullable=field['nullable'],
+                description=field_desc_info.get("description"),
+                example=str(field_desc_info.get("example", "")) if field_desc_info.get("example") else None
+            ))
         
         table_schema = TableSchema(
-            fields=[
-                SchemaField(
-                    name=field["name"],
-                    type=field["type"],
-                    nullable=field["nullable"],
-                    description=field_descriptions.get(field["name"], {}).get("description"),
-                    example=str(field_descriptions.get(field["name"], {}).get("example", "")) if field_descriptions.get(field["name"], {}).get("example") else None
-                )
-                for field in schema_info["fields"]
-            ],
-            version=schema_info["version"],
-            row_count=schema_info["row_count"],
-            num_fields=schema_info["num_fields"]
+            fields=fields,
+            version=cached_schema.get('version', 0),
+            row_count=table_catalogue.get('row_count'),
+            num_fields=cached_schema.get('num_fields', len(fields))
         )
         
-        # Get first 10 rows
-        preview_data = DeltaOperations.preview_table(
-            table_path=table_path,
-            limit=10,
-            filters=None,
-            sort_by=None,
-            sort_order="asc"
-        )
+        # Get preview from cached data
+        preview_data = table_catalogue.get('preview', [])
+        
+        # Get certification status
+        cert_status = await get_certification_status("silver", table_name, db)
         
         return SilverTableDetail(
             name=table_name,
             description_fr=pipeline_info.description_fr or "Description non disponible",
             dependencies=pipeline_info.dependencies,
             schema=table_schema,
-            preview=preview_data["data"]
+            preview=preview_data,
+            certified=cert_status is not None and cert_status.get("certified", False),
+            certified_at=cert_status.get("certified_at") if cert_status else None,
+            certified_by=cert_status.get("certified_by") if cert_status else None
         )
     
     except HTTPException:
@@ -314,7 +408,7 @@ async def get_table_metadata(
     request: Request,
     layer: str,
     table: str,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ):
     """
     Get metadata for a specific table including schema and row count.
@@ -362,7 +456,9 @@ async def preview_table(
     layer: str,
     table: str,
     preview_req: PreviewRequest,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin),
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: firestore.AsyncClient = Depends(get_firestore_client)
 ):
     """
     Get a preview of table data with optional filtering and sorting.
@@ -378,6 +474,9 @@ async def preview_table(
     # Validate layer
     if layer not in ["bronze", "silver", "gold"]:
         raise HTTPException(status_code=400, detail="Layer must be bronze, silver, or gold")
+    
+    # Check access permissions
+    await verify_table_access(layer, table, db, credentials)
     
     # Construct table path
     table_path = f"{settings.delta_path}/{layer}/{table}"
@@ -414,7 +513,9 @@ async def preview_table(
 async def execute_sql_query(
     request: Request,
     query_req: QueryRequest,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin),
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: firestore.AsyncClient = Depends(get_firestore_client)
 ):
     """
     Execute a SQL query against Delta tables.
@@ -430,6 +531,9 @@ async def execute_sql_query(
     
     settings = get_settings()
     sql_executor = SQLExecutor()
+    
+    # Check if user is admin
+    is_admin = await check_admin_or_raise(credentials)
     
     try:
         start_time = time.time()
@@ -447,6 +551,20 @@ async def execute_sql_query(
                     # Use underscore instead of dot for SQL compatibility
                     table_name = f"{layer}_{table['name']}"
                     table_path = table['path']
+                    
+                    # Check access for non-admin users
+                    if not is_admin:
+                        # Non-admins can only query certified silver tables
+                        if layer != "silver":
+                            logger.info(f"Skipping {table_name} - non-silver table, user not admin")
+                            continue
+                        
+                        # Check if silver table is certified
+                        certified = await is_table_certified(layer, table['name'], db)
+                        if not certified:
+                            logger.info(f"Skipping {table_name} - not certified")
+                            continue
+                    
                     try:
                         sql_executor.register_delta_table(table_name, table_path)
                         registered_tables.append(table_name)
@@ -471,6 +589,21 @@ async def execute_sql_query(
         
         # Execute the query
         result_df = sql_executor.execute_query(query_req.sql)
+        
+        # Track usage for queried tables
+        from app.utils.query_tracker import increment_query_count
+        
+        # Parse SQL to find which tables were queried
+        sql_upper = query_req.sql.upper()
+        queried_tables = []
+        for table_name in registered_tables:
+            # Check if table is referenced in query (case insensitive)
+            if table_name.upper() in sql_upper:
+                queried_tables.append(table_name)
+        
+        # Track usage for each queried table
+        for table_name in queried_tables:
+            await increment_query_count(db, table_name, user_id)
         
         # Apply limit
         limited_df = result_df.head(query_req.limit)
@@ -515,4 +648,136 @@ async def execute_sql_query(
             raise HTTPException(status_code=500, detail=f"Query execution failed: {error_msg}")
     finally:
         sql_executor.close()
+
+
+@router.post("/catalog/refresh", response_model=CatalogueRefreshResponse)
+@limiter.limit("10/minute")
+async def refresh_catalogue(
+    request: Request,
+    user_id: str = Depends(verify_api_key_or_admin),
+    db: firestore.AsyncClient = Depends(get_firestore_client)
+):
+    """
+    Refresh the data catalogue in Firestore from the YAML file.
+    
+    This endpoint reads config/data_catalogue.yaml, enriches it with
+    schema and preview data from Delta tables, and syncs to Firestore
+    for fast access.
+    
+    Available to all authenticated users (API key or admin secret).
+    
+    Args:
+        request: FastAPI request object for rate limiting
+        user_id: Authenticated user ID or "admin"
+        db: Firestore async client
+        
+    Returns:
+        Sync status with number of tables and timestamp
+    """
+    try:
+        import yaml
+        from datetime import datetime, timezone
+        
+        settings = get_settings()
+        
+        # Find catalogue file
+        possible_paths = [
+            Path(__file__).parent.parent.parent / "config" / "data_catalogue.yaml",
+            Path("/app/config/data_catalogue.yaml"),
+            Path("config/data_catalogue.yaml"),
+        ]
+        
+        catalogue_path = None
+        for path in possible_paths:
+            if path.exists():
+                catalogue_path = path
+                break
+        
+        if not catalogue_path:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Catalogue file not found in any of: {[str(p) for p in possible_paths]}"
+            )
+        
+        # Load YAML
+        logger.info(f"Loading catalogue from {catalogue_path}")
+        with open(catalogue_path, 'r', encoding='utf-8') as f:
+            catalogue_data = yaml.safe_load(f)
+        
+        # Enrich with Delta table metadata (schema + preview)
+        tables_data = catalogue_data.get('tables', {})
+        enriched_tables = {}
+        
+        for table_name, table_info in tables_data.items():
+            enriched_table = dict(table_info)
+            
+            try:
+                # Get schema from Delta table
+                table_path = f"{settings.delta_path}/silver/{table_name}"
+                schema_info = DeltaOperations.get_table_schema(table_path)
+                
+                enriched_table['schema'] = {
+                    'fields': schema_info['fields'],
+                    'version': schema_info['version'],
+                    'num_fields': schema_info['num_fields']
+                }
+                
+                # Get preview data (first 10 rows)
+                preview_data = DeltaOperations.preview_table(
+                    table_path=table_path,
+                    limit=10,
+                    filters=None,
+                    sort_by=None,
+                    sort_order="asc"
+                )
+                enriched_table['preview'] = preview_data['data']
+                
+                logger.info(f"Enriched {table_name} with schema and preview")
+            except Exception as e:
+                logger.warning(f"Could not enrich {table_name}: {e}")
+                # Keep original table info without enrichment
+            
+            enriched_tables[table_name] = enriched_table
+        
+        # Convert async Firestore client to sync for the sync operation
+        sync_db = firestore.Client()
+        
+        # Prepare document with metadata
+        sync_time = datetime.now(timezone.utc)
+        
+        firestore_doc = {
+            'tables': enriched_tables,
+            'version': catalogue_data.get('version', 'unknown'),
+            'generated_at': catalogue_data.get('generated_at', ''),
+            'last_synced': sync_time,
+            'source_file': 'data_catalogue.yaml',
+            'enriched': True
+        }
+        
+        # Write to Firestore
+        collection_ref = sync_db.collection('data_catalogue')
+        doc_ref = collection_ref.document('silver_tables')
+        doc_ref.set(firestore_doc)
+        
+        num_tables = len(enriched_tables)
+        
+        logger.info(f"✅ Synced {num_tables} enriched tables to Firestore at {sync_time.isoformat()}")
+        
+        result = {
+            'status': 'success',
+            'tables_synced': num_tables,
+            'last_synced': sync_time.isoformat(),
+            'version': catalogue_data.get('version', 'unknown')
+        }
+        
+        return CatalogueRefreshResponse(**result)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to refresh catalogue: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to refresh catalogue: {str(e)}"
+        )
 

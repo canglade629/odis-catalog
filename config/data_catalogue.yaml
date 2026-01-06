@@ -21,7 +21,7 @@ tables:
         description: "Clé surrogate unique (hash MD5 du code INSEE). Clé primaire utilisée pour toutes les jointures géographiques."
         example: "68368e664a4422a17d55658577368fbe"
         
-      commune_code:
+      commune_insee_code:
         type: string
         nullable: false
         description: "Code INSEE de la commune à 5 chiffres (format officiel). Pour les DOM-TOM, commence par 97x ou 98x."
@@ -45,29 +45,65 @@ tables:
         description: "Code région administrative (nomenclature 2016). Mappé depuis le département selon la réforme territoriale."
         example: "84"
         
-      job_insert_id:
+      job_metadata:
+        type: json
+        nullable: false
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc, ingestion_timestamp) au format JSON."
+        example: '{"job_insert_id": "silver_geo", "job_insert_date_utc": "2025-12-03T17:26:51.089Z", "job_modify_id": "silver_geo", "job_modify_date_utc": "2025-12-03T17:26:51.089Z", "ingestion_timestamp": "2025-12-03T15:00:00.000Z"}'
+
+
+  ref_logement_profil:
+    description: "Table de référence des profils de biens immobiliers (type, typologie, surfaces) pour les données 2024. Utilisée pour jointure via logement_profil_sk."
+    row_count: 4
+    fields:
+      logement_profil_sk:
         type: string
         nullable: false
-        description: "Identifiant du pipeline qui a créé l'enregistrement (traçabilité)."
-        example: "silver_geo"
+        description: "Clé surrogate unique (hash MD5 de source_filename). Clé primaire utilisée pour jointure avec fact_loyer_annonce."
+        example: "9810bbf965b83ba99c6f45aeb8d440a0"
         
-      job_insert_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de création de l'enregistrement."
-        example: "2025-12-03 17:26:51.089"
-        
-      job_modify_id:
+      source_filename:
         type: string
         nullable: false
-        description: "Identifiant du dernier pipeline ayant modifié l'enregistrement."
-        example: "silver_geo"
+        description: "Nom du fichier source des données (ex: 'pred-app-mef-dhup.csv')."
+        example: "pred-app-mef-dhup.csv"
         
-      job_modify_date_utc:
-        type: timestamp
+      annee:
+        type: integer
         nullable: false
-        description: "Date et heure UTC de la dernière modification de l'enregistrement."
-        example: "2025-12-03 17:26:51.089"
+        description: "Année de référence des données (2024 pour les données actuelles)."
+        example: 2024
+        
+      logement_type:
+        type: string
+        nullable: false
+        description: "Type de bien immobilier: 'appartement' ou 'maison'."
+        example: "appartement"
+        
+      typologie:
+        type: string
+        nullable: false
+        description: "Segment typologique du bien: 'toutes typologies', 'T1 et T2', ou 'T3 et plus'."
+        example: "toutes typologies"
+        
+      surface:
+        type: decimal(10,2)
+        nullable: false
+        description: "Surface de référence en m² utilisée pour le calcul du loyer moyen pour ce segment."
+        example: 52.0
+        
+      surface_piece_moy:
+        type: decimal(10,2)
+        nullable: false
+        description: "Surface moyenne par pièce en m² pour ce segment typologique."
+        example: 22.2
+        
+      job_metadata:
+        type: json
+        nullable: false
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc) au format JSON."
+        example: '{"job_insert_id": "ref_logement_profil", "job_insert_date_utc": "2025-12-05T10:00:00.000Z", "job_modify_id": "ref_logement_profil", "job_modify_date_utc": "2025-12-05T10:00:00.000Z"}'
+
 
   dim_accueillant:
     description: "Table de dimension des structures d'accueil avec enrichissement géographique (FK vers dim_commune) et coordonnées GPS."
@@ -76,7 +112,7 @@ tables:
       accueillant_sk:
         type: string
         nullable: false
-        description: "Clé surrogate unique (hash MD5 de latitude + longitude + statut + code postal + ville). Clé primaire."
+        description: "Clé surrogate unique (hash MD5 de latitude + longitude + statut). Clé primaire."
         example: "34396592d9b4e4923bc8e860372e2c26"
         
       commune_sk:
@@ -91,18 +127,6 @@ tables:
         description: "Statut actuel de la structure d'accueil dans le processus (ex: 'Bilan à faire', 'En attente de mise en relation')."
         example: "Bilan à faire"
         
-      ville:
-        type: string
-        nullable: false
-        description: "Nom de la ville où se situe la structure d'accueil (non standardisé, tel que saisi)."
-        example: "marseille"
-        
-      code_postal:
-        type: string
-        nullable: false
-        description: "Code postal de la structure d'accueil (format 5 chiffres français)."
-        example: "13007"
-        
       latitude:
         type: double
         nullable: false
@@ -115,192 +139,103 @@ tables:
         description: "Longitude géographique en degrés décimaux (système WGS84). Comprise entre -180 et 180."
         example: 5.356134
         
-      job_insert_id:
+      job_metadata:
+        type: json
+        nullable: false
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc, ingestion_timestamp) au format JSON."
+        example: '{"job_insert_id": "dim_accueillant", "job_insert_date_utc": "2025-12-03T17:26:54.263Z", "job_modify_id": "dim_accueillant", "job_modify_date_utc": "2025-12-03T17:26:54.263Z", "ingestion_timestamp": "2025-12-03T15:00:00.000Z"}'
+
+
+  dim_gare_segment:
+    description: "Table de référence des segments de gares (A=National, B=Régional, C=Local). Table hardcodée avec 3 lignes."
+    row_count: 3
+    fields:
+      gare_segment_sk:
         type: string
         nullable: false
-        description: "Identifiant du pipeline qui a créé l'enregistrement."
-        example: "dim_accueillant"
+        description: "Clé surrogate unique (hash MD5 du code segment). Clé primaire utilisée pour jointure avec dim_gare."
+        example: "7fc56270e7a70fa81a5935b72eacbe29"
         
-      job_insert_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de création de l'enregistrement."
-        example: "2025-12-03 17:26:54.263"
-        
-      job_modify_id:
+      gare_segment_code:
         type: string
         nullable: false
-        description: "Identifiant du dernier pipeline ayant modifié l'enregistrement."
-        example: "dim_accueillant"
+        description: "Code du segment de gare: 'A' (National), 'B' (Régional), ou 'C' (Local)."
+        example: "A"
         
-      job_modify_date_utc:
-        type: timestamp
+      gare_segment_label:
+        type: string
         nullable: false
-        description: "Date et heure UTC de la dernière modification."
-        example: "2025-12-03 17:26:54.263"
+        description: "Libellé du segment de gare."
+        example: "Gare d'intérêt national"
+        
+      gare_segment_description:
+        type: string
+        nullable: false
+        description: "Description détaillée du segment avec critères de classification."
+        example: "Gares dont la fréquentation voyageurs nationaux/internationaux est ≥ 250 000 par an ou représente 100% du trafic"
+        
+      job_metadata:
+        type: json
+        nullable: false
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc) au format JSON."
+        example: '{"job_insert_id": "dim_gare_segment", "job_insert_date_utc": "2025-12-05T13:50:00.000Z", "job_modify_id": "dim_gare_segment", "job_modify_date_utc": "2025-12-05T13:50:00.000Z"}'
+
 
   dim_gare:
-    description: "Table de dimension des gares voyageurs avec enrichissement géographique (FK vers dim_commune), codes UIC et coordonnées GPS."
-    row_count: 2974
+    description: "Table de dimension des gares voyageurs avec enrichissement géographique (FK vers dim_commune et dim_gare_segment) et coordonnées GPS."
+    row_count: 2785
     fields:
       gare_sk:
         type: string
         nullable: false
-        description: "Clé surrogate unique (hash MD5 du code UIC). Clé primaire."
+        description: "Clé surrogate unique (hash MD5 du trigramme). Clé primaire."
         example: "03753033274ae40987ca3689f75a13dd"
         
       commune_sk:
         type: string
         nullable: true
-        description: "Clé étrangère vers dim_commune. Enrichissement géographique via le code géo de la gare."
-        example: ""
+        description: "Clé étrangère vers dim_commune. Enrichissement géographique via le code commune de la gare."
+        example: "b344953b75615eb41588c6753a3899e9"
         
-      code_uic:
+      gare_segment_sk:
         type: string
         nullable: false
-        description: "Code UIC (Union Internationale des Chemins de fer) unique identifiant la gare au niveau européen."
-        example: "87142000"
+        description: "Clé étrangère vers dim_gare_segment. Classification de la gare (National/Régional/Local) après nettoyage avec logique de priorité A>B>C."
+        example: "7fc56270e7a70fa81a5935b72eacbe29"
         
-      libelle:
+      gare_code:
         type: string
         nullable: false
-        description: "Nom officiel de la gare tel qu'utilisé par SNCF Réseau."
-        example: "Chaumont"
+        description: "Code trigramme de la gare (identifiant unique court, ex: 'PAR' pour Paris)."
+        example: "PAR"
         
-      fret:
-        type: boolean
-        nullable: false
-        description: "Indique si la gare accepte le trafic fret (true) ou non (false)."
-        example: true
-        
-      voyageurs:
-        type: boolean
-        nullable: false
-        description: "Indique si la gare accepte le trafic voyageurs (true). Toujours true dans cette table (filtre appliqué)."
-        example: true
-        
-      code_ligne:
+      gare_label:
         type: string
         nullable: false
-        description: "Code de la ligne ferroviaire principale sur laquelle se trouve la gare."
-        example: "020000"
-        
-      rg_troncon:
-        type: string
-        nullable: false
-        description: "Rang du tronçon de ligne où se situe la gare."
-        example: "1"
-        
-      pk:
-        type: string
-        nullable: false
-        description: "Point kilométrique de la gare sur la ligne (format: kilomètres+mètres)."
-        example: "306+425"
-        
-      commune:
-        type: string
-        nullable: false
-        description: "Nom de la commune où se situe la gare (en majuscules)."
-        example: "CHAUMONT"
-        
-      departement:
-        type: string
-        nullable: false
-        description: "Nom du département où se situe la gare (en majuscules)."
-        example: "HAUTE-MARNE"
-        
-      idreseau:
-        type: string
-        nullable: false
-        description: "Identifiant réseau SNCF de la gare."
-        example: "3669"
-        
-      idgaia:
-        type: string
-        nullable: false
-        description: "Identifiant GAIA (système d'information géographique SNCF) de la gare (format UUID)."
-        example: "d9da7f04-6667-11e3-89ff-01f464e0362d"
-        
-      x_l93:
-        type: double
-        nullable: false
-        description: "Coordonnée X en projection Lambert 93 (système de référence français)."
-        example: 856942.5474999994
-        
-      y_l93:
-        type: double
-        nullable: false
-        description: "Coordonnée Y en projection Lambert 93 (système de référence français)."
-        example: 6781158.473099999
-        
-      longitude:
-        type: double
-        nullable: false
-        description: "Longitude géographique en degrés décimaux (système WGS84)."
-        example: 5.10906827225772
+        description: "Nom de la gare tel qu'utilisé par SNCF."
+        example: "Paris-Gare-de-Lyon"
         
       latitude:
         type: double
         nullable: false
-        description: "Latitude géographique en degrés décimaux (système WGS84)."
-        example: 48.1119332578839
+        description: "Latitude géographique en degrés décimaux (système WGS84). Comprise entre -90 et 90."
+        example: 48.8444
         
-      c_geo:
-        type: string
+      longitude:
+        type: double
         nullable: false
-        description: "Code géographique de la commune (format texte 'lat, lon')."
-        example: "48.1119332578839, 5.10906827225772"
+        description: "Longitude géographique en degrés décimaux (système WGS84). Comprise entre -180 et 180."
+        example: 2.3732
         
-      geo_point:
-        type: string
+      job_metadata:
+        type: json
         nullable: false
-        description: "Point géographique au format texte (latitude, longitude)."
-        example: "48.111933257873325, 5.109068272257723"
-        
-      geo_shape_coordinates:
-        type: string
-        nullable: false
-        description: "Coordonnées GeoJSON du point (format: [longitude, latitude])."
-        example: "[5.109068272257723, 48.111933257873325]"
-        
-      geo_shape_type:
-        type: string
-        nullable: false
-        description: "Type de géométrie GeoJSON (toujours 'Point' pour les gares)."
-        example: "Point"
-        
-      ingestion_timestamp:
-        type: timestamp
-        nullable: false
-        description: "Date et heure d'ingestion de la donnée brute depuis la source."
-        example: "2025-12-03 15:55:57.085994"
-        
-      job_insert_id:
-        type: string
-        nullable: false
-        description: "Identifiant du pipeline qui a créé l'enregistrement."
-        example: "dim_gare"
-        
-      job_insert_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de création de l'enregistrement."
-        example: "2025-12-03 17:26:56.391"
-        
-      job_modify_id:
-        type: string
-        nullable: false
-        description: "Identifiant du dernier pipeline ayant modifié l'enregistrement."
-        example: "dim_gare"
-        
-      job_modify_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de la dernière modification."
-        example: "2025-12-03 17:26:56.391"
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc, ingestion_timestamp) au format JSON."
+        example: '{"job_insert_id": "dim_gare", "job_insert_date_utc": "2025-12-05T13:46:26.000Z", "job_modify_id": "dim_gare", "job_modify_date_utc": "2025-12-05T13:46:26.000Z", "ingestion_timestamp": "2025-12-05T12:00:00.000Z"}'
+
 
   dim_ligne:
-    description: "Table de dimension des lignes ferroviaires avec tronçons, catégories (TGV/non-TGV) et coordonnées de début/fin."
+    description: "Table de dimension des lignes ferroviaires avec catégories (TGV/non-TGV) et coordonnées géographiques."
     row_count: 933
     fields:
       ligne_sk:
@@ -328,154 +263,76 @@ tables:
         nullable: false
         description: "Indicateur true si la ligne est une LGV (Ligne à Grande Vitesse), false sinon."
         
-      rg_troncon:
-        type: integer
-        nullable: false
-        description: "Rang/numéro du tronçon de ligne (une ligne peut être composée de plusieurs tronçons)."
-        
-      pkd:
-        type: string
-        nullable: true
-        description: "Point kilométrique de début du tronçon."
-        
-      pkf:
-        type: string
-        nullable: true
-        description: "Point kilométrique de fin du tronçon."
-        
-      idgaia:
-        type: string
-        nullable: true
-        description: "Identifiant GAIA du tronçon de ligne."
-        
-      x_d_l93:
-        type: double
-        nullable: true
-        description: "Coordonnée X de début du tronçon en Lambert 93."
-        
-      y_d_l93:
-        type: double
-        nullable: true
-        description: "Coordonnée Y de début du tronçon en Lambert 93."
-        
-      x_f_l93:
-        type: double
-        nullable: true
-        description: "Coordonnée X de fin du tronçon en Lambert 93."
-        
-      y_f_l93:
-        type: double
-        nullable: true
-        description: "Coordonnée Y de fin du tronçon en Lambert 93."
-        
-      x_d_wgs84:
-        type: double
-        nullable: true
-        description: "Longitude de début du tronçon (WGS84)."
-        
-      y_d_wgs84:
-        type: double
-        nullable: true
-        description: "Latitude de début du tronçon (WGS84)."
-        
-      x_f_wgs84:
-        type: double
-        nullable: true
-        description: "Longitude de fin du tronçon (WGS84)."
-        
-      y_f_wgs84:
-        type: double
-        nullable: true
-        description: "Latitude de fin du tronçon (WGS84)."
-        
-      c_geo_d:
-        type: string
-        nullable: true
-        description: "Code géographique de la commune de début du tronçon."
-        
-      c_geo_f:
-        type: string
-        nullable: true
-        description: "Code géographique de la commune de fin du tronçon."
-        
-      geo_point:
-        type: string
-        nullable: true
-        description: "Point géographique représentatif de la ligne (format texte)."
-        
-      geo_shape_type:
-        type: string
-        nullable: true
-        description: "Type de géométrie GeoJSON du tronçon (généralement 'LineString')."
-        
       geo_shape_coordinates:
         type: string
         nullable: true
-        description: "Coordonnées GeoJSON du tronçon de ligne."
+        description: "Coordonnées GeoJSON de la ligne."
         
-      ingestion_timestamp:
-        type: timestamp
+      job_metadata:
+        type: json
         nullable: false
-        description: "Date et heure d'ingestion de la donnée brute."
-        
-      job_insert_id:
-        type: string
-        nullable: false
-        description: "Identifiant du pipeline qui a créé l'enregistrement."
-        
-      job_insert_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de création."
-        
-      job_modify_id:
-        type: string
-        nullable: false
-        description: "Identifiant du dernier pipeline ayant modifié l'enregistrement."
-        
-      job_modify_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de la dernière modification."
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc, ingestion_timestamp) au format JSON."
+        example: '{"job_insert_id": "dim_ligne", "job_insert_date_utc": "2025-12-03T17:26:57.000Z", "job_modify_id": "dim_ligne", "job_modify_date_utc": "2025-12-03T17:26:57.000Z", "ingestion_timestamp": "2025-12-03T15:00:00.000Z"}'
+
 
   dim_siae_structure:
     description: "Table de dimension des structures d'insertion par l'activité économique (SIAE) avec enrichissement géographique (FK vers dim_commune) et informations de contact."
-    row_count: 1976
+    row_count: 86374
     fields:
       siae_structure_sk:
         type: string
         nullable: false
-        description: "Clé surrogate unique (hash MD5 du SIRET). Clé primaire."
+        description: "Clé surrogate unique (hash MD5 de l'ID). Clé primaire."
+        
+      siae_structure_bk:
+        type: string
+        nullable: false
+        description: "Business key - identifiant unique original de la structure dans le système source."
+        
+      siae_structure_siret_code:
+        type: string
+        nullable: false
+        description: "Code SIRET - numéro SIRET de la structure (14 chiffres), identifiant officiel d'établissement."
+        
+      siae_structure_label:
+        type: string
+        nullable: false
+        description: "Nom/libellé de la structure."
+        
+      siae_structure_description:
+        type: string
+        nullable: true
+        description: "Description textuelle des activités de la structure."
         
       commune_sk:
         type: string
         nullable: true
-        description: "Clé étrangère vers dim_commune. Enrichissement géographique via matching fuzzy du nom de ville."
+        description: "Clé étrangère vers dim_commune. Hash MD5 du nom de commune."
         
-      id:
+      code_postal:
         type: string
         nullable: false
-        description: "Identifiant UUID original de la structure dans le système source."
+        description: "Code postal de la structure."
         
-      siret:
+      adresse:
         type: string
         nullable: false
-        description: "Numéro SIRET de la structure (14 chiffres), identifiant officiel d'établissement."
+        description: "Adresse postale principale de la structure."
         
-      structure_type:
-        type: string
-        nullable: false
-        description: "Type de structure SIAE (EI=Entreprise d'Insertion, AI=Association Intermédiaire, ETTI=Entreprise de Travail Temporaire d'Insertion, etc.)."
-        
-      raison_sociale:
-        type: string
-        nullable: false
-        description: "Raison sociale officielle de la structure (nom juridique)."
-        
-      enseigne:
+      complement_adresse:
         type: string
         nullable: true
-        description: "Nom commercial de la structure (peut différer de la raison sociale)."
+        description: "Complément d'adresse (bâtiment, étage, etc.)."
+        
+      longitude:
+        type: double
+        nullable: true
+        description: "Coordonnée géographique - longitude."
+        
+      latitude:
+        type: double
+        nullable: true
+        description: "Coordonnée géographique - latitude."
         
       telephone:
         type: string
@@ -492,100 +349,32 @@ tables:
         nullable: true
         description: "URL du site web de la structure."
         
-      description:
-        type: string
-        nullable: true
-        description: "Description textuelle des activités de la structure."
-        
-      accepte_candidatures:
-        type: boolean
+      job_metadata:
+        type: json
         nullable: false
-        description: "Indique si la structure accepte actuellement des candidatures spontanées (true) ou non (false). Inversé depuis bloque_candidatures."
-        
-      date_creation:
-        type: timestamp
-        nullable: true
-        description: "Date de création de la fiche structure dans le système source."
-        
-      date_mise_a_jour:
-        type: timestamp
-        nullable: true
-        description: "Date de dernière mise à jour de la fiche structure dans le système source."
-        
-      adresse_ligne1:
-        type: string
-        nullable: false
-        description: "Première ligne de l'adresse postale."
-        
-      adresse_ligne2:
-        type: string
-        nullable: true
-        description: "Deuxième ligne de l'adresse postale (complément d'adresse, bâtiment, etc.)."
-        
-      code_postal:
-        type: string
-        nullable: false
-        description: "Code postal de la structure."
-        
-      ville:
-        type: string
-        nullable: false
-        description: "Ville de la structure (non standardisée)."
-        
-      departement:
-        type: string
-        nullable: false
-        description: "Code ou nom du département."
-        
-      code_insee:
-        type: string
-        nullable: true
-        description: "Code INSEE de la commune, obtenu par enrichissement géographique."
-        
-      ville_standardisee:
-        type: string
-        nullable: true
-        description: "Nom standardisé de la ville après matching avec le référentiel INSEE."
-        
-      job_insert_id:
-        type: string
-        nullable: false
-        description: "Identifiant du pipeline qui a créé l'enregistrement."
-        
-      job_insert_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de création."
-        
-      job_modify_id:
-        type: string
-        nullable: false
-        description: "Identifiant du dernier pipeline ayant modifié l'enregistrement."
-        
-      job_modify_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de la dernière modification."
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc) au format JSON."
+        example: '{"job_insert_id": "silver_siae_structures", "job_insert_date_utc": "2025-12-03T17:27:00.000Z", "job_modify_id": "silver_siae_structures", "job_modify_date_utc": "2025-12-03T17:27:00.000Z"}'
+
 
   # ============================================================================
   # TABLES DE FAITS
   # ============================================================================
   
   fact_loyer_annonce:
-    description: "Table de faits des loyers d'annonce au m² par commune avec bornes de prédiction, niveau d'observation et indicateurs de qualité. FK vers dim_commune. Inclut les données 2024 avec segmentation par type de bien et typologie."
-    row_count: 34915
+    description: "Table de faits des loyers d'annonce au m² par commune avec bornes de prédiction, niveau d'observation et indicateurs de qualité. FK vers dim_commune et ref_logement_profil."
+    row_count: 139672
     fields:
-      row_sk:
-        type: string
-        nullable: false
-        description: "Clé surrogate unique (hash MD5 du code commune + annee + type_bien + segment_typologie pour 2024, ou code commune seul pour données legacy). Clé primaire."
-        example: "b611890bcbe01216a7d0a58a1ec554a6"
-        
       commune_sk:
         type: string
         nullable: false
         description: "Clé étrangère vers dim_commune. Permet de joindre avec les données géographiques (département, région, EPCI via dim_commune)."
         example: "b611890bcbe01216a7d0a58a1ec554a6"
+        
+      logement_profil_sk:
+        type: string
+        nullable: true
+        description: "Clé étrangère vers ref_logement_profil (hash MD5 de source_filename). Permet de récupérer le type de bien, la typologie et les surfaces de référence via jointure."
+        example: "9810bbf965b83ba99c6f45aeb8d440a0"
         
       loyer_m2_moy:
         type: decimal(10,2)
@@ -629,62 +418,17 @@ tables:
         description: "Nombre d'observations réelles au niveau de la commune."
         example: 42
         
-      annee:
-        type: integer
-        nullable: true
-        description: "Année de référence des données de loyer (2024 pour les nouvelles données, NULL pour données legacy)."
-        example: 2024
-        
-      type_bien:
-        type: string
-        nullable: true
-        description: "Type de bien immobilier: 'appartement' ou 'maison'. NULL pour données legacy sans segmentation."
-        example: "appartement"
-        
-      segment_typologie:
-        type: string
-        nullable: true
-        description: "Segment typologique du bien: 'toutes typologies', 'T1 et T2', ou 'T3 et plus'. NULL pour données legacy."
-        example: "toutes typologies"
-        
-      surface_ref:
-        type: decimal(10,2)
-        nullable: true
-        description: "Surface de référence en m² utilisée pour le calcul du loyer moyen pour ce segment. Varie selon type_bien et segment_typologie."
-        example: 52.0
-        
-      surface_piece_moy:
-        type: decimal(10,2)
-        nullable: true
-        description: "Surface moyenne par pièce en m² pour ce segment typologique."
-        example: 22.2
-        
-      job_insert_id:
-        type: string
+      job_metadata:
+        type: json
         nullable: false
-        description: "Identifiant du pipeline qui a créé l'enregistrement."
-        example: "fact_loyer_annonce"
-        
-      job_insert_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de création."
-        example: "2025-12-05 17:27:05.278"
-        
-      job_modify_id:
-        type: string
-        nullable: false
-        description: "Identifiant du dernier pipeline ayant modifié l'enregistrement."
-        example: "fact_loyer_annonce"
-        
-      job_modify_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de la dernière modification."
-        example: "2025-12-05 17:27:05.278"
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc, ingestion_timestamp) au format JSON."
+        example: '{"job_insert_id": "fact_loyer_annonce", "job_insert_date_utc": "2025-12-05T17:27:05.278Z", "job_modify_id": "fact_loyer_annonce", "job_modify_date_utc": "2025-12-05T17:27:05.278Z", "ingestion_timestamp": "2025-12-05T15:00:00.000Z"}'
+
+
+
 
   fact_zone_attraction:
-    description: "Table de faits des aires d'attraction des villes 2020 avec FKs vers communes (commune et pôle) et catégories d'attraction."
+    description: "Table de faits des zones d'attraction des villes 2020 avec FKs vers communes (commune et pôle) et catégories d'attraction."
     row_count: 26209
     fields:
       zone_attraction_sk:
@@ -695,57 +439,34 @@ tables:
       commune_sk:
         type: string
         nullable: false
-        description: "Clé étrangère vers dim_commune. Identifie la commune concernée par l'aire d'attraction."
+        description: "Clé étrangère vers dim_commune. Identifie la commune concernée par la zone d'attraction."
         
       commune_pole_sk:
         type: string
         nullable: false
-        description: "Clé étrangère vers dim_commune. Identifie la commune pôle (centre de l'aire d'attraction)."
+        description: "Clé étrangère vers dim_commune. Identifie la commune pôle (centre de la zone d'attraction)."
         
-      aire_attraction_code:
+      zone_attraction_code:
         type: string
         nullable: false
-        description: "Code de l'aire d'attraction des villes 2020 (nomenclature INSEE)."
+        description: "Code de la zone d'attraction des villes 2020 (nomenclature INSEE)."
         
-      aire_attraction_label:
+      zone_attraction_label:
         type: string
         nullable: false
-        description: "Nom de l'aire d'attraction (généralement le nom de la ville pôle). Les mentions '(partie française)' ont été retirées."
+        description: "Nom de la zone d'attraction (généralement le nom de la ville pôle). Les mentions '(partie française)' ont été retirées."
         
-      aire_attraction_categorie:
+      zone_attraction_categorie:
         type: string
         nullable: false
-        description: "Catégorie de l'aire d'attraction selon sa taille démographique (ex: 'Grande aire', 'Moyenne aire', 'Petite aire')."
+        description: "Catégorie de la zone d'attraction selon sa taille démographique (ex: 'Grande aire', 'Moyenne aire', 'Petite aire')."
         
-      departement_code:
-        type: string
+      job_metadata:
+        type: json
         nullable: false
-        description: "Code département de la commune."
-        
-      region_code:
-        type: string
-        nullable: false
-        description: "Code région de la commune."
-        
-      job_insert_id:
-        type: string
-        nullable: false
-        description: "Identifiant du pipeline qui a créé l'enregistrement."
-        
-      job_insert_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de création."
-        
-      job_modify_id:
-        type: string
-        nullable: false
-        description: "Identifiant du dernier pipeline ayant modifié l'enregistrement."
-        
-      job_modify_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de la dernière modification."
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc, ingestion_timestamp) au format JSON."
+        example: '{"job_insert_id": "fact_zone_attraction", "job_insert_date_utc": "2025-12-03T17:27:02.000Z", "job_modify_id": "fact_zone_attraction", "job_modify_date_utc": "2025-12-03T17:27:02.000Z", "ingestion_timestamp": "2025-12-03T15:00:00.000Z"}'
+
 
   fact_siae_poste:
     description: "Table de faits des postes ouverts en SIAE avec codes ROME, types de contrats et disponibilité. FK vers dim_siae_structure."
@@ -829,33 +550,15 @@ tables:
         description: "Date et heure de dernière modification de l'offre dans le système source."
         example: "2025-12-02 07:25:17.755128"
         
-      job_insert_id:
-        type: string
+      job_metadata:
+        type: json
         nullable: false
-        description: "Identifiant du pipeline qui a créé l'enregistrement."
-        example: "fact_siae_poste"
-        
-      job_insert_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de création dans la couche Silver."
-        example: "2025-12-03 17:27:10.044"
-        
-      job_modify_id:
-        type: string
-        nullable: false
-        description: "Identifiant du dernier pipeline ayant modifié l'enregistrement."
-        example: "fact_siae_poste"
-        
-      job_modify_date_utc:
-        type: timestamp
-        nullable: false
-        description: "Date et heure UTC de la dernière modification dans la couche Silver."
-        example: "2025-12-03 17:27:10.044"
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc, ingestion_timestamp) au format JSON."
+        example: '{"job_insert_id": "fact_siae_poste", "job_insert_date_utc": "2025-12-03T17:27:10.044Z", "job_modify_id": "fact_siae_poste", "job_modify_date_utc": "2025-12-03T17:27:10.044Z", "ingestion_timestamp": "2025-12-03T15:00:00.000Z"}'
 
 # Notes d'utilisation:
 # - Toutes les clés surrogates (*_sk) sont des hash MD5 et servent de clés primaires/étrangères
-# - Les champs job_* sont présents dans toutes les tables pour la traçabilité
+# - Le champ job_metadata est présent dans toutes les tables pour la traçabilité (format JSON)
 # - Les coordonnées géographiques utilisent le système WGS84 (sauf mention Lambert 93)
 # - Les timestamps sont toujours en UTC
 # - Les FK nullable indiquent que l'enrichissement géographique peut échouer

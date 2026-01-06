@@ -16,8 +16,12 @@ class Settings(BaseSettings):
     gcs_delta_prefix: str = "delta"
     
     # API Configuration
-    admin_secret: str = "changeme"
+    admin_secret: str  # No default - must be explicitly set
     environment: str = "development"
+    
+    # CORS Configuration
+    # Comma-separated list of allowed origins, or "*" for development only
+    cors_origins: str = "https://odace-pipeline-588398598428.europe-west1.run.app"
     
     # Optional Database URL for metadata
     database_url: Optional[str] = None
@@ -37,6 +41,43 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra fields in .env that are not in the model
+    
+    def __init__(self, **kwargs):
+        """Initialize settings with security validation."""
+        super().__init__(**kwargs)
+        self._validate_security()
+    
+    def _validate_security(self):
+        """Validate security-critical configuration."""
+        # Check for insecure admin secret
+        insecure_secrets = ["changeme", "admin", "secret", "password", "test", ""]
+        if self.admin_secret.lower() in insecure_secrets:
+            raise ValueError(
+                f"ADMIN_SECRET is set to an insecure value '{self.admin_secret}'. "
+                "Please set a strong, unique secret in your environment variables."
+            )
+        
+        # Warn if using wildcard CORS in production
+        if self.environment == "production" and self.cors_origins == "*":
+            raise ValueError(
+                "CORS wildcard (*) is not allowed in production. "
+                "Set CORS_ORIGINS to specific allowed domains."
+            )
+    
+    @property
+    def allowed_origins(self) -> List[str]:
+        """Parse and return list of allowed CORS origins."""
+        if self.cors_origins == "*":
+            # Only allowed in development
+            if self.environment == "development":
+                return ["*"]
+            else:
+                raise ValueError("CORS wildcard not allowed in production")
+        
+        # Split comma-separated origins and strip whitespace
+        origins = [origin.strip() for origin in self.cors_origins.split(",")]
+        return [origin for origin in origins if origin]  # Filter empty strings
     
     @property
     def gcs_bucket_url(self) -> str:

@@ -62,7 +62,7 @@ Every table includes:
 | Column | Type | Description |
 |--------|------|-------------|
 | `commune_sk` | STRING | **Surrogate key** (PK) |
-| `commune_code` | STRING | INSEE code (5 digits) |
+| `commune_insee_code` | STRING | INSEE code (5 digits) |
 | `commune_label` | STRING | Commune name |
 | `departement_code` | STRING | Department code (2 digits) |
 | `region_code` | STRING | Region code |

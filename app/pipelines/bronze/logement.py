@@ -136,6 +136,10 @@ class BronzeLogementPipeline(BaseBronzePipeline):
         # Extract filename
         filename = file_path.split('/')[-1]
         
+        # Add source_id column with the filename
+        df['source_id'] = filename
+        logger.info(f"Added source_id: {filename}")
+        
         # Try to extract timestamp from filename pattern: *_YYYYMMDD_HHMMSS.csv
         match = re.search(r'_(\d{8}_\d{6})', filename)
         

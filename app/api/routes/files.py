@@ -1,6 +1,6 @@
 """File upload and management endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
-from app.core.auth import verify_api_key
+from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin
 from app.core.models import FileUploadResponse
 from app.core.config import get_settings
 from app.utils.gcs_ops import get_gcs_operations
@@ -11,20 +11,22 @@ router = APIRouter(prefix="/api/files", tags=["files"])
 
 
 @router.post("/upload", response_model=FileUploadResponse)
-@limiter.limit("60/minute")
+@limiter.limit("20/hour")
 async def upload_file(
     request: Request,
     domain: str,
     file: UploadFile = File(...),
-    api_key: str = Depends(verify_api_key)
+    admin_verified: bool = Depends(verify_admin_secret)
 ):
     """
     Upload a file to the raw data folder in GCS.
     
+    **Requires admin authentication.**
+    
     Args:
         domain: Domain/folder name (e.g., 'accueillants', 'geo', 'logement')
         file: File to upload
-        api_key: API key for authentication
+        admin_verified: Admin authentication
         
     Returns:
         File upload response with destination path
@@ -59,7 +61,7 @@ async def upload_file(
 async def list_files(
     request: Request,
     domain: str = None,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ):
     """
     List files in raw data storage.

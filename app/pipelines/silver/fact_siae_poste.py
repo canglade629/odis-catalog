@@ -58,11 +58,14 @@ class FactSIAEPostePipeline(SQLSilverV2Pipeline):
                 COALESCE(CAST(p.nombre_postes_ouverts AS INTEGER), 0) AS postes_nombre,
                 CAST(p.cree_le AS TIMESTAMP) AS creation_date_utc,
                 CAST(p.mis_a_jour_le AS TIMESTAMP) AS modification_date_utc,
-                'fact_siae_poste' AS job_insert_id,
-                CURRENT_TIMESTAMP AS job_insert_date_utc,
-                'fact_siae_poste' AS job_modify_id,
-                CURRENT_TIMESTAMP AS job_modify_date_utc
+                JSON_OBJECT(
+                    'job_insert_id', 'fact_siae_poste',
+                    'job_insert_date_utc', CURRENT_TIMESTAMP,
+                    'job_modify_id', 'fact_siae_poste',
+                    'job_modify_date_utc', CURRENT_TIMESTAMP,
+                    'ingestion_timestamp', p.ingestion_timestamp
+                ) AS job_metadata
             FROM deduplicated p
-            LEFT JOIN silver_dim_siae_structure s ON CAST(p.structure_id AS VARCHAR) = CAST(s.id AS VARCHAR)
+            LEFT JOIN silver_dim_siae_structure s ON CAST(p.structure_id AS VARCHAR) = CAST(s.siae_structure_bk AS VARCHAR)
             WHERE p.rn = 1 AND p.rome_code_extracted IS NOT NULL
         """

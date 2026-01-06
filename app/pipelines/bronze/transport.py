@@ -1,6 +1,7 @@
-"""Bronze pipeline for transport data (gares and lignes) from Open Data API."""
+"""Bronze pipeline for transport data (gares and lignes)."""
 import pandas as pd
 import re
+from app.pipelines.base import BaseBronzePipeline
 from app.pipelines.base_api import BaseAPIBronzePipeline
 from app.core.pipeline_registry import register_pipeline
 import logging
@@ -9,91 +10,62 @@ logger = logging.getLogger(__name__)
 
 
 @register_pipeline(layer="bronze", name="gares")
-class BronzeGaresPipeline(BaseAPIBronzePipeline):
-    """Ingests gares (train stations) data from Open Data API into bronze layer."""
-    
-    # SNCF Gares resource ID from data.gouv.fr
-    RESOURCE_ID = "d22ba593-90a4-4725-977c-095d1f654d28"
-    
-    def __init__(self):
-        """Initialize with Open Data API configuration."""
-        super().__init__()
-        # Override rate limiter for Open Data API (100 req/sec)
-        from app.pipelines.base_api import RateLimiter
-        self.rate_limiter = RateLimiter(
-            max_requests=self.settings.open_data_api_rate_limit,
-            time_window=1  # 1 second window
-        )
+class BronzeGaresPipeline(BaseBronzePipeline):
+    """Ingests gares (train stations) CSV data from raw folder into bronze layer."""
     
     def get_name(self) -> str:
         return "bronze_gares"
     
     def get_source_path(self) -> str:
-        return f"api://open_data/{self.RESOURCE_ID}"
+        return self.settings.get_raw_path("transport/gares")
     
     def get_target_table(self) -> str:
         return "gares"
     
-    def get_api_endpoint(self) -> str:
-        """Get the API endpoint for SNCF gares resource."""
-        return f"/resources/{self.RESOURCE_ID}/data/"
-    
-    def get_api_params(self) -> dict:
-        """Get query parameters for API request."""
-        return {'page_size': 100}
-    
-    async def fetch_all_data(self):
-        """Fetch all data from Open Data API."""
-        import httpx
-        import asyncio
+    def read_source_file(self, file_path: str) -> pd.DataFrame:
+        """Read CSV file from GCS with auto-delimiter detection."""
+        logger.info(f"Reading gares CSV file: {file_path}")
         
-        base_url = self.settings.open_data_api_base_url
-        endpoint = self.get_api_endpoint()
-        url = f"{base_url}{endpoint}"
-        params = self.get_api_params()
+        # Download file to memory
+        file_content = self.gcs.download_file(file_path)
         
-        all_records = []
-        page = 1
+        # Try to auto-detect delimiter (common ones: comma, semicolon, tab)
+        try:
+            df = pd.read_csv(
+                pd.io.common.BytesIO(file_content),
+                header=0,
+                sep=None,  # Auto-detect delimiter
+                engine='python',
+                encoding='utf-8-sig',  # utf-8-sig strips BOM automatically
+                on_bad_lines='skip'  # Skip problematic lines
+            )
+            logger.info(f"Auto-detected delimiter successfully")
+        except Exception as e:
+            logger.warning(f"Auto-detection failed: {e}, trying semicolon delimiter")
+            # Fallback to semicolon
+            df = pd.read_csv(
+                pd.io.common.BytesIO(file_content),
+                header=0,
+                sep=';',
+                encoding='utf-8-sig',
+                on_bad_lines='skip'
+            )
         
-        async with httpx.AsyncClient() as client:
-            self.client = client
-            
-            while True:
-                page_params = {**params, "page": page}
-                logger.info(f"Fetching page {page}...")
-                response_data = await self.fetch_page(url, page_params)
-                
-                records = response_data.get("data", [])
-                if not records:
-                    break
-                
-                all_records.extend(records)
-                
-                meta = response_data.get("meta", {})
-                total = meta.get("total", "unknown")
-                logger.info(f"Fetched {len(all_records)} / {total} records")
-                
-                if not response_data.get("links", {}).get("next"):
-                    break
-                
-                page += 1
+        # Strip BOM from column names if present (extra safety)
+        df.columns = df.columns.str.replace('^\ufeff', '', regex=True)
         
-        logger.info(f"Fetched {len(all_records)} total records")
-        return all_records
+        # Convert all columns to string to avoid Delta Lake null type issues
+        for col in df.columns:
+            df[col] = df[col].astype(str)
+        
+        logger.info(f"Read {len(df)} rows with {len(df.columns)} columns")
+        return df
     
     def transform(self, df: pd.DataFrame, file_path: str) -> pd.DataFrame:
-        """Normalize column names and convert types to match Databricks schema."""
+        """Normalize column names."""
         # Normalize column names: lowercase, replace non-alphanumeric with underscores
         normalized_cols = [re.sub(r'[^a-zA-Z0-9]', '_', c).lower() for c in df.columns]
         df.columns = normalized_cols
-        
-        # Convert numeric columns to string to match Databricks schema
-        if 'code_uic' in df.columns:
-            df['code_uic'] = df['code_uic'].astype(str)
-        if 'code_ligne' in df.columns:
-            df['code_ligne'] = df['code_ligne'].astype(str)
-        if 'idreseau' in df.columns:
-            df['idreseau'] = df['idreseau'].astype(str)
         
         # Add ingestion timestamp
         df = super().transform(df, file_path)

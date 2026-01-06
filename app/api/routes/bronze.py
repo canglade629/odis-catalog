@@ -1,6 +1,6 @@
 """Bronze layer API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.core.auth import verify_api_key
+from app.core.auth import verify_api_key, verify_admin_secret
 from app.core.models import PipelineRunRequest, PipelineRunResponse, PipelineLayer, PipelineStatus
 from app.core.pipeline_executor import get_pipeline_executor
 from app.core.job_manager import get_job_manager, JobStatus
@@ -12,20 +12,22 @@ router = APIRouter(prefix="/api/bronze", tags=["bronze"])
 
 
 @router.post("/{pipeline_name}")
-@limiter.limit("60/minute")
+@limiter.limit("10/hour")
 async def run_bronze_pipeline(
     request: Request,
     pipeline_name: str,
     force: bool = False,
-    api_key: str = Depends(verify_api_key)
+    admin_verified: bool = Depends(verify_admin_secret)
 ):
     """
     Run a specific bronze layer pipeline.
     
+    **Requires admin authentication.**
+    
     Args:
         pipeline_name: Name of the bronze pipeline to run
         force: Force reprocessing of all files
-        api_key: API key for authentication
+        admin_verified: Admin authentication
         
     Returns:
         Pipeline run response with job ID and status

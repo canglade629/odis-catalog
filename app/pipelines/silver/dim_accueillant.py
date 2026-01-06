@@ -48,22 +48,30 @@ class DimAccueillantPipeline(SQLSilverV2Pipeline):
             with_commune AS (
                 SELECT 
                     a.*,
-                    c.commune_sk
+                    c.commune_sk,
+                    b.ingestion_timestamp
                 FROM accueillants_clean a
                 LEFT JOIN silver_dim_commune c
-                    ON SUBSTRING(a.code_postal, 1, 5) = c.commune_code
+                    ON SUBSTRING(a.code_postal, 1, 5) = c.commune_insee_code
+                LEFT JOIN deduplicated_bronze b
+                    ON TRIM(b.Ville) = a.ville
+                    AND TRIM(b.Code_postal) = a.code_postal
+                    AND CAST(b.Latitude AS DOUBLE) = a.latitude
+                    AND CAST(b.Longitude AS DOUBLE) = a.longitude
+                    AND b.rn = 1
             )
             SELECT 
-                MD5(CONCAT(CAST(latitude AS VARCHAR), CAST(longitude AS VARCHAR), statut, COALESCE(code_postal, ''), UPPER(ville))) AS accueillant_sk,
+                MD5(CONCAT(CAST(latitude AS VARCHAR), CAST(longitude AS VARCHAR), statut)) AS accueillant_sk,
                 commune_sk,
                 statut,
-                ville,
-                code_postal,
                 latitude,
                 longitude,
-                'dim_accueillant' AS job_insert_id,
-                CURRENT_TIMESTAMP AS job_insert_date_utc,
-                'dim_accueillant' AS job_modify_id,
-                CURRENT_TIMESTAMP AS job_modify_date_utc
+                JSON_OBJECT(
+                    'job_insert_id', 'dim_accueillant',
+                    'job_insert_date_utc', CURRENT_TIMESTAMP,
+                    'job_modify_id', 'dim_accueillant',
+                    'job_modify_date_utc', CURRENT_TIMESTAMP,
+                    'ingestion_timestamp', ingestion_timestamp
+                ) AS job_metadata
             FROM with_commune
         """

@@ -14,11 +14,17 @@ pipelines:
     pipeline_class: "app.pipelines.silver.dim_accueillant.DimAccueillantPipeline"
     description_fr: "Table de dimension des structures d'accueil avec enrichissement géographique (FK vers dim_commune) et coordonnées GPS."
     
+  - name: "dim_gare_segment"
+    target_table: "dim_gare_segment"
+    dependencies: []
+    pipeline_class: "app.pipelines.silver.dim_gare_segment.DimGareSegmentPipeline"
+    description_fr: "Table de référence des segments de gares (A=National, B=Régional, C=Local) avec 3 catégories hardcodées."
+    
   - name: "dim_gare"
     target_table: "dim_gare"
-    dependencies: ["bronze.gares", "silver.dim_commune"]
+    dependencies: ["bronze.gares", "silver.dim_commune", "silver.dim_gare_segment"]
     pipeline_class: "app.pipelines.silver.dim_gare.DimGarePipeline"
-    description_fr: "Table de dimension des gares voyageurs avec enrichissement géographique (FK vers dim_commune), codes UIC et coordonnées GPS."
+    description_fr: "Table de dimension des gares voyageurs avec enrichissement géographique (FK vers dim_commune et dim_gare_segment), codes trigramme et coordonnées GPS."
     
   - name: "dim_ligne"
     target_table: "dim_ligne"
@@ -32,11 +38,17 @@ pipelines:
     pipeline_class: "app.pipelines.silver.dim_siae_structure.DimSIAEStructurePipeline"
     description_fr: "Table de dimension des structures d'insertion par l'activité économique (SIAE) avec enrichissement géographique (FK vers dim_commune) et informations de contact."
     
+  - name: "ref_logement_profil"
+    target_table: "ref_logement_profil"
+    dependencies: []
+    pipeline_class: "app.pipelines.silver.ref_logement_profil.RefLogementProfilPipeline"
+    description_fr: "Table de référence des profils de biens immobiliers (type, typologie, surfaces de référence) pour les données 2024."
+    
   - name: "fact_loyer_annonce"
     target_table: "fact_loyer_annonce"
-    dependencies: ["bronze.logement", "silver.dim_commune"]
+    dependencies: ["bronze.logement", "silver.dim_commune", "silver.ref_logement_profil"]
     pipeline_class: "app.pipelines.silver.fact_loyer_annonce.FactLoyerAnnoncePipeline"
-    description_fr: "Table de faits des loyers d'annonce au m² par commune avec bornes de prédiction, niveau d'observation et indicateurs de qualité. FK vers dim_commune."
+    description_fr: "Table de faits des loyers d'annonce au m² par commune avec bornes de prédiction, niveau d'observation et indicateurs de qualité. FK vers dim_commune et ref_logement_profil."
     
   - name: "fact_zone_attraction"
     target_table: "fact_zone_attraction"

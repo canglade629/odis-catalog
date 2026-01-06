@@ -1,6 +1,6 @@
 """Job tracking API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.core.auth import verify_api_key
+from app.core.auth import verify_api_key, verify_api_key_or_admin
 from app.core.job_manager import get_job_manager
 from app.core.pipeline_executor import get_pipeline_executor
 from app.core.rate_limiter import limiter
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 async def list_jobs(
     request: Request,
     limit: int = 50,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ) -> Dict[str, Any]:
     """
     List recent jobs with progress.
@@ -47,7 +47,7 @@ async def list_jobs(
 async def get_job(
     request: Request,
     job_id: str,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ) -> Dict[str, Any]:
     """
     Get job details including all tasks.
@@ -83,7 +83,7 @@ async def get_job_logs(
     task_id: str = None,
     limit: int = 1000,
     offset: int = 0,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ) -> Dict[str, Any]:
     """
     Get logs for a specific job.
@@ -155,7 +155,7 @@ async def get_job_logs(
 async def get_all_logs_stream(
     request: Request,
     limit: int = 500,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ) -> Dict[str, Any]:
     """
     Get recent logs from all jobs in chronological order.
@@ -171,8 +171,8 @@ async def get_all_logs_stream(
     db = firestore.Client(project=settings.gcp_project_id)
     
     try:
-        # Get recent jobs (last 10)
-        jobs_ref = db.collection("jobs").order_by("started_at", direction=firestore.Query.DESCENDING).limit(10)
+        # Get recent jobs (last 3)
+        jobs_ref = db.collection("jobs").order_by("started_at", direction=firestore.Query.DESCENDING).limit(3)
         
         all_logs = []
         
@@ -213,7 +213,7 @@ async def get_all_logs_stream(
 async def cancel_job(
     request: Request,
     job_id: str,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ) -> Dict[str, Any]:
     """
     Cancel a running job.

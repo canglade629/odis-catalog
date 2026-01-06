@@ -24,46 +24,43 @@ class DimSIAEStructurePipeline(SQLSilverV2Pipeline):
     def get_sql_query(self) -> str:
         """SQL query to transform bronze SIAE structures data with geographic enrichment."""
         return """
-            WITH geo_enriched AS (
-                SELECT s.*, g.code_insee, g.nom_standard
-                FROM bronze_siae_structures s
-                LEFT JOIN bronze_geo g 
-                    ON UPPER(TRIM(REPLACE(s.ville, '-', ' '))) = UPPER(TRIM(g.nom_standard))
-            ),
-            with_commune_sk AS (
+            WITH with_commune_sk AS (
                 SELECT s.*, c.commune_sk
-                FROM geo_enriched s
-                LEFT JOIN silver_dim_commune c ON s.code_insee = c.commune_code
+                FROM bronze_siae_structures s
+                LEFT JOIN silver_dim_commune c ON s.code_insee = c.commune_insee_code
             ),
             deduplicated AS (
                 SELECT *,
                     ROW_NUMBER() OVER (
                         PARTITION BY siret 
                         ORDER BY CASE WHEN commune_sk IS NOT NULL THEN 0 ELSE 1 END, 
-                                 mis_a_jour_le DESC
+                                 date_maj DESC
                     ) AS rn
                 FROM with_commune_sk
-                WHERE LENGTH(REGEXP_REPLACE(siret, '[^0-9]', '')) = 14
+                WHERE siret IS NOT NULL 
+                  AND LENGTH(REGEXP_REPLACE(siret, '[^0-9]', '')) = 14
             )
             SELECT 
-                MD5(siret) AS siae_structure_sk,
-                commune_sk, id, siret, type AS structure_type,
-                raison_sociale, enseigne, 
+                MD5(id) AS siae_structure_sk,
+                id AS siae_structure_bk,
+                siret AS siae_structure_siret_code,
+                nom AS siae_structure_label,
+                description AS siae_structure_description,
+                MD5(commune) AS commune_sk,
+                code_postal,
+                adresse,
+                complement_adresse,
+                longitude,
+                latitude,
                 COALESCE(telephone, '') AS telephone,
                 COALESCE(courriel, '') AS courriel,
                 COALESCE(site_web, '') AS site_web,
-                description,
-                CASE WHEN bloque_candidatures = TRUE THEN FALSE ELSE TRUE END AS accepte_candidatures,
-                cree_le AS date_creation,
-                mis_a_jour_le AS date_mise_a_jour,
-                addresse_ligne_1 AS adresse_ligne1,
-                COALESCE(addresse_ligne_2, '') AS adresse_ligne2,
-                code_postal, ville, departement, code_insee,
-                nom_standard AS ville_standardisee,
-                'silver_siae_structures' AS job_insert_id,
-                CURRENT_TIMESTAMP AS job_insert_date_utc,
-                'silver_siae_structures' AS job_modify_id,
-                CURRENT_TIMESTAMP AS job_modify_date_utc
+                JSON_OBJECT(
+                    'job_insert_id', 'silver_siae_structures',
+                    'job_insert_date_utc', CURRENT_TIMESTAMP,
+                    'job_modify_id', 'silver_siae_structures',
+                    'job_modify_date_utc', CURRENT_TIMESTAMP
+                ) AS job_metadata
             FROM deduplicated
             WHERE rn = 1
         """

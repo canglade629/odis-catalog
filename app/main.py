@@ -31,10 +31,11 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Configure CORS
+# Configure CORS with security-validated origins
+settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

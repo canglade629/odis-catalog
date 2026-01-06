@@ -18,6 +18,9 @@ COPY DATA_MODEL.md .
 # Copy configuration files
 COPY config/ ./config/
 
+# Copy scripts directory for catalogue sync
+COPY scripts/ ./scripts/
+
 # Copy application code
 COPY app/ ./app/
 

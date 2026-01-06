@@ -65,7 +65,7 @@ def test_sql_syntax_validation():
         conn.execute("""
             CREATE TABLE silver_dim_commune (
                 commune_sk VARCHAR,
-                commune_code VARCHAR,
+                commune_insee_code VARCHAR,
                 commune_label VARCHAR
             )
         """)

@@ -27,7 +27,7 @@ class DimCommunePipeline(SQLSilverV2Pipeline):
         
         Extracts:
         - commune_sk: Surrogate key (MD5 hash of INSEE code)
-        - commune_code: INSEE code (5 digits)
+        - commune_insee_code: INSEE code (5 digits)
         - commune_label: Official commune name
         - departement_code: Extracted from first 2-3 chars of INSEE code
         - region_code: Mapped from department code
@@ -46,7 +46,7 @@ class DimCommunePipeline(SQLSilverV2Pipeline):
             )
             SELECT 
                 MD5(code_insee) as commune_sk,
-                code_insee as commune_code,
+                code_insee as commune_insee_code,
                 nom_standard as commune_label,
                 CASE 
                     WHEN code_insee LIKE '97%' OR code_insee LIKE '98%' 
@@ -92,10 +92,13 @@ class DimCommunePipeline(SQLSilverV2Pipeline):
                     WHEN SUBSTRING(code_insee, 1, 3) = '976' THEN '06'
                     ELSE NULL
                 END as region_code,
-                'silver_geo' as job_insert_id,
-                CURRENT_TIMESTAMP as job_insert_date_utc,
-                'silver_geo' as job_modify_id,
-                CURRENT_TIMESTAMP as job_modify_date_utc
+                JSON_OBJECT(
+                    'job_insert_id', 'silver_geo',
+                    'job_insert_date_utc', CURRENT_TIMESTAMP,
+                    'job_modify_id', 'silver_geo',
+                    'job_modify_date_utc', CURRENT_TIMESTAMP,
+                    'ingestion_timestamp', ingestion_timestamp
+                ) AS job_metadata
             FROM deduplicated
             WHERE rn = 1
         """

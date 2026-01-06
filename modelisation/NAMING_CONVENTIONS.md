@@ -191,7 +191,7 @@ CREATE TABLE dim_<entite> (
 ```sql
 CREATE TABLE dim_commune (
     commune_sk           STRING,
-    commune_code         STRING,        -- Code INSEE
+    commune_insee_code   STRING,        -- Code INSEE
     commune_label        STRING,        -- Nom officiel
     
     job_insert_id        STRING,

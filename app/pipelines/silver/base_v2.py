@@ -13,7 +13,7 @@ class SQLSilverV2Pipeline(SQLSilverPipeline):
     
     Silver layer enforces:
     - Surrogate keys (_sk) on all tables
-    - Metadata columns (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc)
+    - Metadata column (job_metadata) as JSON with job tracking info
     - Proper naming conventions (dim_/fact_ prefixes, lowercase, underscores)
     - Normalized schema with proper foreign keys
     - SQL transformations for clarity and maintainability
@@ -57,17 +57,9 @@ class SQLSilverV2Pipeline(SQLSilverPipeline):
             target_path = self.settings.get_silver_path(table_name)
             logger.info(f"Writing {len(transformed_df)} rows to {target_path}")
             
-            # Verify metadata columns
-            required_metadata = [
-                'job_insert_id',
-                'job_insert_date_utc',
-                'job_modify_id',
-                'job_modify_date_utc'
-            ]
-            
-            missing_metadata = [col for col in required_metadata if col not in transformed_df.columns]
-            if missing_metadata:
-                logger.warning(f"Missing metadata columns: {missing_metadata}")
+            # Verify metadata column
+            if 'job_metadata' not in transformed_df.columns:
+                logger.warning(f"Missing job_metadata column")
             
             # Write to Delta
             from app.utils.delta_ops import DeltaOperations

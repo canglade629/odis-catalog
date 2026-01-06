@@ -48,12 +48,21 @@ gcloud run deploy ${SERVICE_NAME} \
     --cpu 2 \
     --timeout 300 \
     --max-instances 10 \
-    --set-env-vars "ENVIRONMENT=production" \
+    --set-env-vars "ENVIRONMENT=production,GCP_PROJECT_ID=icc-project-472009,GCS_BUCKET=jaccueille,CORS_ORIGINS=https://odace-pipeline-588398598428.europe-west1.run.app" \
+    --update-secrets "ADMIN_SECRET=odace-admin-secret:latest" \
     --project ${PROJECT_ID}
 
 if [ $? -ne 0 ]; then
     echo "❌ Cloud Run deployment failed"
     exit 1
+fi
+
+# Step 5: Sync data catalogue to Firestore
+echo "📚 Syncing data catalogue to Firestore..."
+python3 scripts/sync_catalogue_to_firestore.py
+
+if [ $? -ne 0 ]; then
+    echo "⚠️  Warning: Catalogue sync failed (non-critical)"
 fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

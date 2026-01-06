@@ -21,14 +21,15 @@ Successfully migrated the logement pipeline to support 2024 data from 4 separate
   - `pred-app3-mef-dhup.csv` → appartement, T3 et plus (72m², 21.2m²/pièce)
   - `pred-mai-mef-dhup.csv` → maison, toutes typologies (92m², 22.4m²/pièce)
 
-**New Columns Added** (for 2024 files only):
-- `annee`: 2024
-- `type_bien`: 'appartement' or 'maison'
-- `segment_typologie`: 'toutes typologies', 'T1 et T2', or 'T3 et plus'
-- `surface_ref`: Reference surface in m²
-- `surface_piece_moy`: Average surface per room in m²
+**New Columns Added**:
+- `source_id`: Filename of the source file (for all files) - added Dec 5, 2025
+- `annee`: 2024 (for 2024 files only)
+- `type_bien`: 'appartement' or 'maison' (for 2024 files only)
+- `segment_typologie`: 'toutes typologies', 'T1 et T2', or 'T3 et plus' (for 2024 files only)
+- `surface_ref`: Reference surface in m² (for 2024 files only)
+- `surface_piece_moy`: Average surface per room in m² (for 2024 files only)
 
-**Backward Compatibility**: Legacy files get NULL values for new columns
+**Backward Compatibility**: Legacy files get NULL values for new 2024-specific columns
 
 ---
 

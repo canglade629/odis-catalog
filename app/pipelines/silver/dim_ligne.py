@@ -37,18 +37,14 @@ class DimLignePipeline(SQLSilverV2Pipeline):
                 lib_ligne AS ligne_label,
                 catlig AS categorie,
                 is_tgv,
-                rg_troncon,
-                pkd, pkf, idgaia,
-                x_d_l93, y_d_l93, x_f_l93, y_f_l93,
-                x_d_wgs84, y_d_wgs84, x_f_wgs84, y_f_wgs84,
-                c_geo_d, c_geo_f, 
-                geo_point,
-                geo_shape_type, geo_shape_coordinates,
-                ingestion_timestamp,
-                'dim_ligne' AS job_insert_id,
-                CURRENT_TIMESTAMP AS job_insert_date_utc,
-                'dim_ligne' AS job_modify_id,
-                CURRENT_TIMESTAMP AS job_modify_date_utc
+                geo_shape_coordinates,
+                JSON_OBJECT(
+                    'job_insert_id', 'dim_ligne',
+                    'job_insert_date_utc', CURRENT_TIMESTAMP,
+                    'job_modify_id', 'dim_ligne',
+                    'job_modify_date_utc', CURRENT_TIMESTAMP,
+                    'ingestion_timestamp', ingestion_timestamp
+                ) AS job_metadata
             FROM deduplicated
             WHERE rn = 1
         """

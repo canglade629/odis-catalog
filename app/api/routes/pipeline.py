@@ -1,6 +1,6 @@
 """Pipeline orchestration endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.core.auth import verify_api_key
+from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin
 from app.core.models import (
     FullPipelineRunRequest,
     PipelineRunResponse,
@@ -19,18 +19,20 @@ router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
 
 @router.post("/run")
-@limiter.limit("60/minute")
+@limiter.limit("10/hour")
 async def run_full_pipeline(
     request: Request,
     pipeline_request: FullPipelineRunRequest = FullPipelineRunRequest(),
-    user_id: str = Depends(verify_api_key)
+    admin_verified: bool = Depends(verify_admin_secret)
 ):
     """
     Run the full data pipeline (bronze → silver).
     
+    **Requires admin authentication.**
+    
     Args:
         request: Pipeline run configuration
-        user_id: User ID from API key authentication
+        admin_verified: Admin authentication
         
     Returns:
         Summary of pipeline execution including job ID
@@ -42,7 +44,7 @@ async def run_full_pipeline(
             bronze_only=pipeline_request.bronze_only,
             silver_only=pipeline_request.silver_only,
             force=pipeline_request.force,
-            user_id=user_id
+            user_id="admin"
         )
         
         # Summarize results
@@ -68,7 +70,7 @@ async def run_full_pipeline(
 async def get_pipeline_status(
     request: Request,
     run_id: str,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ):
     """
     Get status of a pipeline run.
@@ -107,7 +109,7 @@ async def get_pipeline_status(
 async def get_pipeline_history(
     request: Request,
     limit: int = 50,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ):
     """
     Get recent pipeline execution history.
@@ -133,7 +135,7 @@ async def get_pipeline_history(
 async def list_pipelines(
     request: Request,
     layer: str = None,
-    api_key: str = Depends(verify_api_key)
+    user_id: str = Depends(verify_api_key_or_admin)
 ):
     """
     List all available pipelines.

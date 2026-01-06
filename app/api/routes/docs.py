@@ -1,7 +1,7 @@
 """Documentation endpoints."""
 from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
-from app.core.auth import verify_api_key
+from app.core.auth import verify_api_key, verify_api_key_or_admin
 from pathlib import Path
 import os
 import logging
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/docs", tags=["documentation"])
 
 
 @router.get("/data-model", response_class=PlainTextResponse)
-async def get_data_model_doc(api_key: str = Depends(verify_api_key)):
+async def get_data_model_doc(user_id: str = Depends(verify_api_key_or_admin)):
     """
     Get the DATA_MODEL.md documentation content.
     

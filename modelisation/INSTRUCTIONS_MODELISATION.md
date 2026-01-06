@@ -64,7 +64,7 @@ Ces principes **DOIVENT** être appliqués à toutes les tables Silver pour gara
 ```sql
 -- dim_commune
 commune_sk          -- Clé primaire
-commune_code        -- Décrit la commune
+commune_insee_code  -- Décrit la commune
 commune_label       -- Décrit la commune
 departement_code    -- Décrit la commune (dans quel département elle se trouve)
 ```
@@ -73,8 +73,8 @@ departement_code    -- Décrit la commune (dans quel département elle se trouve
 ```sql
 -- dim_commune (mauvais design)
 commune_sk          -- Clé primaire
-commune_code        
-commune_label       
+commune_insee_code
+commune_label
 departement_code    
 departement_label   -- ❌ Dépend de departement_code, pas de commune_sk
 region_code         
@@ -98,10 +98,10 @@ region_label        -- ❌ Dépend de region_code, pas de commune_sk
 ```sql
 -- ❌ MAUVAIS: fact_loyer_annonce avec dépendances transitives
 row_sk
-commune_code        -- Identifie la commune
-commune_label       -- ❌ Dépend de commune_code (transitive)
-departement_code    -- ❌ Dépend de commune_code (transitive)
-departement_label   -- ❌ Dépend de departement_code (transitive)
+commune_insee_code        -- Identifie la commune
+commune_label             -- ❌ Dépend de commune_insee_code (transitive)
+departement_code          -- ❌ Dépend de commune_insee_code (transitive)
+departement_label         -- ❌ Dépend de departement_code (transitive)
 loyer_m2_moy
 ```
 
@@ -134,7 +134,7 @@ loyer_m2_moy
 ```sql
 -- dim_commune (table de référence unique)
 commune_sk
-commune_code
+commune_insee_code
 commune_label       -- Stocké UNE SEULE FOIS
 departement_code
 
@@ -153,12 +153,12 @@ aire_attraction_code
 ```sql
 -- fact_loyer_annonce
 row_sk
-commune_code
+commune_insee_code
 commune_label       -- ❌ Dupliqué
 
 -- fact_zone_attraction
 zone_attraction_sk
-commune_code
+commune_insee_code
 commune_label       -- ❌ Dupliqué (risque d'incohérence)
 ```
 
@@ -349,8 +349,8 @@ commune_sk SERIAL PRIMARY KEY
 **Action:** Stocker les codes officiels normalisés avec le suffixe `_code` :
 
 ```sql
-commune_code VARCHAR(5) NOT NULL  -- Code INSEE normalisé
-epci_code VARCHAR(9) NOT NULL     -- Code EPCI officiel
+commune_insee_code VARCHAR(5) NOT NULL  -- Code INSEE normalisé
+epci_code VARCHAR(9) NOT NULL           -- Code EPCI officiel
 ```
 
 **Règle:** Les `_code` contiennent toujours les codes officiels normalisés (INSEE, SIRET, etc.).
@@ -365,16 +365,16 @@ epci_code VARCHAR(9) NOT NULL     -- Code EPCI officiel
 
 1. [ ] Renommer la table: `geo` → `dim_commune`
 2. [ ] Ajouter `commune_sk` (clé de substitution)
-3. [ ] Renommer `CODGEO` → `commune_code` (code officiel)
+3. [ ] Renommer `CODGEO` → `commune_insee_code` (code officiel)
 4. [ ] Renommer `LIBGEO` → `commune_label` (libellé officiel)
 5. [ ] Extraire `departement_code` depuis les 2 premiers caractères du code commune
 7. [ ] Ajouter `region_code` (à mapper depuis table de référence)
 8. [ ] Ajouter les 4 colonnes de métadonnées obligatoires (en anglais: job_*)
-9. [ ] Créer contrainte UNIQUE sur `commune_code`
+9. [ ] Créer contrainte UNIQUE sur `commune_insee_code`
 10. [ ] Créer index sur `departement_code` et `region_code`
 11. [ ] Ajouter commentaires SQL en français sur la table et les colonnes
 
-> **Note convention**: `commune_code` et `commune_label` utilisent des termes français pour l'entité (commune) car c'est un concept métier, mais `_code` et `_label` sont des suffixes techniques standardisés.
+> **Note convention**: `commune_insee_code` et `commune_label` utilisent des termes français pour l'entité (commune) car c'est un concept métier, mais `_insee_code` et `_label` sont des suffixes techniques standardisés.
 
 ---
 
@@ -579,7 +579,7 @@ RÉGION (code 2 chiffres)
 LEFT JOIN {{ ref('dim_commune') }} AS commune
     ON source.code_postal = commune.code_postal
     -- OU
-    ON source.insee_code = commune.commune_code
+    ON source.insee_code = commune.commune_insee_code
     -- OU
     ON UPPER(TRIM(source.ville)) = UPPER(commune.commune_label)
 ```
@@ -605,9 +605,9 @@ commune.commune_sk
    ```sql
    CREATE TABLE dim_arrondissement (
        arrondissement_code VARCHAR(5),
-       commune_code VARCHAR(5),
+       commune_insee_code VARCHAR(5),
        arrondissement_label VARCHAR(255),
-       FOREIGN KEY (commune_code) REFERENCES dim_commune(commune_code)
+       FOREIGN KEY (commune_insee_code) REFERENCES dim_commune(commune_insee_code)
    );
    ```
 
@@ -685,7 +685,7 @@ models:
           - unique
           - not_null
       
-      - name: commune_code
+      - name: commune_insee_code
         description: "Code INSEE officiel de la commune (5 caractères)"
         tests:
           - unique

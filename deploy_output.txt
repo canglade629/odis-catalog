@@ -1,0 +1,303 @@
+🚀 Starting deployment of odace-pipeline
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📦 Building Docker image...
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 754B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.11-slim
+#2 ...
+
+#3 [auth] library/python:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.11-slim
+#2 DONE 1.2s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 239B done
+#4 DONE 0.0s
+
+#5 [ 1/10] FROM docker.io/library/python:3.11-slim@sha256:193fdd0bbcb3d2ae612bd6cc3548d2f7c78d65b549fcaa8af75624c47474444d
+#5 resolve docker.io/library/python:3.11-slim@sha256:193fdd0bbcb3d2ae612bd6cc3548d2f7c78d65b549fcaa8af75624c47474444d done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 152.22kB 0.0s done
+#6 DONE 0.0s
+
+#7 [ 5/10] RUN pip install --no-cache-dir -r requirements.txt
+#7 CACHED
+
+#8 [ 3/10] RUN apt-get update && apt-get install -y     gcc     g++     && rm -rf /var/lib/apt/lists/*
+#8 CACHED
+
+#9 [ 4/10] COPY requirements.txt .
+#9 CACHED
+
+#10 [ 2/10] WORKDIR /app
+#10 CACHED
+
+#11 [ 6/10] COPY DATA_MODEL.md .
+#11 CACHED
+
+#12 [ 7/10] COPY config/ ./config/
+#12 DONE 0.0s
+
+#13 [ 8/10] COPY scripts/ ./scripts/
+#13 DONE 0.0s
+
+#14 [ 9/10] COPY app/ ./app/
+#14 DONE 0.0s
+
+#15 [10/10] RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+#15 DONE 0.3s
+
+#16 exporting to image
+#16 exporting layers 0.1s done
+#16 exporting manifest sha256:ad3951b9bfae19fc3151fdc71188a2af670df57337ac449691b1db611758a763 done
+#16 exporting config sha256:88b6a1dce002a24be9411a738b41ec3c4322f77258f0374ba09adbedb208a351 done
+#16 exporting attestation manifest sha256:f71202106e82ba6d184cdbd3a360a3e6eb8b7f8994f3e00dd75f5a2929e1fda0 done
+#16 exporting manifest list sha256:8d5eeb35851f8a23f0bdeebd02d7f5779ab86288e00e8d2b14701510b9f0a171 done
+#16 naming to gcr.io/icc-project-472009/odace-pipeline:latest done
+#16 DONE 0.1s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/jg7bkko4jhlad4ltzawd7y4eu
+✅ Docker image built successfully
+🔐 Configuring Docker authentication...
+WARNING: Your config file at [/Users/christophe.anglade/.docker/config.json] contains these credential helper entries:
+
+{
+  "credHelpers": {
+    "asia.gcr.io": "gcloud",
+    "eu.gcr.io": "gcloud",
+    "europe-west1-docker.pkg.dev": "gcloud",
+    "gcr.io": "gcloud",
+    "marketplace.gcr.io": "gcloud",
+    "staging-k8s.gcr.io": "gcloud",
+    "us.gcr.io": "gcloud"
+  }
+}
+Adding credentials for: gcr.io
+gcloud credential helpers already registered correctly.
+⬆️  Pushing image to GCR...
+The push refers to repository [gcr.io/icc-project-472009/odace-pipeline]
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+c9b794002a74: Waiting
+f8980572c896: Waiting
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+0e4bc2bd6656: Waiting
+703f04a42a92: Waiting
+22b63e76fde1: Waiting
+1771569cc129: Waiting
+c9b794002a74: Waiting
+f8980572c896: Layer already exists
+b3dd773c3296: Waiting
+7657587c418b: Waiting
+913bec81da4d: Waiting
+64657b21cd1b: Waiting
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+b9d35932a0ac: Layer already exists
+45a0faf36c7c: Waiting
+45a0faf36c7c: Waiting
+0e4bc2bd6656: Layer already exists
+703f04a42a92: Waiting
+22b63e76fde1: Layer already exists
+1771569cc129: Layer already exists
+c9b794002a74: Waiting
+b3dd773c3296: Layer already exists
+7657587c418b: Layer already exists
+913bec81da4d: Layer already exists
+64657b21cd1b: Layer already exists
+836d833cc634: Waiting
+c056a9f521c6: Waiting
+45a0faf36c7c: Waiting
+703f04a42a92: Waiting
+703f04a42a92: Pushed
+c9b794002a74: Pushed
+836d833cc634: Pushed
+45a0faf36c7c: Pushed
+c056a9f521c6: Pushed
+latest: digest: sha256:8d5eeb35851f8a23f0bdeebd02d7f5779ab86288e00e8d2b14701510b9f0a171 size: 856
+✅ Image pushed to GCR successfully
+🚢 Deploying to Cloud Run...
+Deploying container to Cloud Run service [odace-pipeline] in project [icc-project-472009] region [europe-west1]
+Deploying...
+Setting IAM Policy...............done
+Creating Revision...................................................................................................................................................................................done
+Routing traffic.....done
+Done.
+Service [odace-pipeline] revision [odace-pipeline-00163-nsw] has been deployed and is serving 100 percent of traffic.
+Service URL: https://odace-pipeline-588398598428.europe-west1.run.app
+📚 Syncing data catalogue to Firestore...
+Traceback (most recent call last):
+  File "/Users/christophe.anglade/Documents/odace_backend/scripts/sync_catalogue_to_firestore.py", line 10, in <module>
+    import yaml
+ModuleNotFoundError: No module named 'yaml'

@@ -1,9 +1,6 @@
-"""Bronze pipeline for SIAE structures data."""
+"""Bronze pipeline for SIAE structures data - reads from CSV files."""
 import pandas as pd
-import asyncio
-import httpx
-from typing import List, Dict, Any
-from app.pipelines.base_api import BaseAPIBronzePipeline
+from app.pipelines.base import BaseBronzePipeline
 from app.core.pipeline_registry import register_pipeline
 import logging
 
@@ -11,124 +8,89 @@ logger = logging.getLogger(__name__)
 
 
 @register_pipeline(layer="bronze", name="siae_structures")
-class BronzeSIAEStructuresPipeline(BaseAPIBronzePipeline):
+class BronzeSIAEStructuresPipeline(BaseBronzePipeline):
     """
-    Ingests SIAE structures data from emplois.inclusion.beta.gouv.fr API.
+    Ingests SIAE structures data from CSV files.
     
-    Fetches data about social inclusion employment structures including:
-    - SIRET number
-    - Structure type
-    - Legal and trade names
-    - Address and coordinates
-    - Recruitment status
-    - Job positions offered
+    Reads from gs://jaccueille/raw/api/siae_structures/ (CSV format).
     """
     
     def get_name(self) -> str:
         return "bronze_siae_structures"
     
+    def get_source_path(self) -> str:
+        return "gs://jaccueille/raw/api/siae_structures/"
+    
     def get_target_table(self) -> str:
         return "siae_structures"
     
-    def get_api_endpoint(self) -> str:
-        return "/siaes/"
-    
-    def get_french_departments(self) -> list:
-        """
-        Get list of French department codes.
+    def read_source_file(self, file_path: str) -> pd.DataFrame:
+        """Read CSV file from GCS."""
+        logger.info(f"Reading SIAE structures CSV from: {file_path}")
         
-        Returns all metropolitan and overseas departments.
-        """
-        # Metropolitan departments: 01-95 (excluding 20 which is split into 2A/2B)
-        metropolitan = [f"{i:02d}" for i in range(1, 20)] + ["2A", "2B"] + [f"{i:02d}" for i in range(21, 96)]
-        # Overseas departments
-        overseas = ["971", "972", "973", "974", "976"]
-        return metropolitan + overseas
-    
-    def get_api_params(self) -> dict:
-        """
-        Get API parameters.
+        # Download file content
+        file_content = self.gcs.download_file(file_path)
         
-        The /siaes/ endpoint requires either:
-        - code_insee + distance_max_km
-        - departement
-        - postes_dans_le_departement
+        # Parse CSV with explicit dtypes to ensure proper string handling
+        import io
+        dtype_dict = {
+            'id': str,
+            'siret': str,
+            'nom': str,
+            'commune': str,
+            'code_postal': str,
+            'code_insee': str,
+            'adresse': str,
+            'complement_adresse': str,
+            'telephone': str,
+            'courriel': str,
+            'site_web': str,
+            'description': str,
+            'source': str,
+            'date_maj': str,
+            'lien_source': str,
+            'horaires_accueil': str,
+            'accessibilite_lieu': str,
+            'reseaux_porteurs': str
+        }
         
-        We'll fetch by department to get all structures.
-        """
-        # This will be overridden during fetch to iterate through departments
-        return {}
-    
-    async def fetch_all_data(self) -> List[Dict[str, Any]]:
-        """
-        Fetch all SIAE structures by iterating through all French departments.
-        
-        The API requires a department filter, so we query each department separately.
-        """
-        base_url = self.settings.siae_api_base_url
-        endpoint = self.get_api_endpoint()
-        url = f"{base_url}{endpoint}"
-        
-        all_records = []
-        departments = self.get_french_departments()
-        
-        async with httpx.AsyncClient() as client:
-            self.client = client
-            
-            for dept in departments:
-                logger.info(f"Fetching SIAE structures for department {dept}...")
-                
-                try:
-                    # Fetch for this department
-                    await self.rate_limiter.acquire()
-                    
-                    params = {"departement": dept}
-                    response = await client.get(url, params=params, timeout=30.0)
-                    response.raise_for_status()
-                    
-                    data = response.json()
-                    
-                    # Handle different response structures
-                    if isinstance(data, dict) and "results" in data:
-                        records = data["results"]
-                    elif isinstance(data, list):
-                        records = data
-                    else:
-                        logger.warning(f"Unexpected response type for dept {dept}: {type(data)}")
-                        continue
-                    
-                    logger.info(f"  Found {len(records)} structures in department {dept}")
-                    all_records.extend(records)
-                    
-                except httpx.HTTPStatusError as e:
-                    logger.warning(f"HTTP error for department {dept}: {e}")
-                    # Continue with next department
-                except Exception as e:
-                    logger.error(f"Error fetching department {dept}: {e}")
-                    # Continue with next department
-        
-        logger.info(f"Fetched {len(all_records)} total SIAE structures across all departments")
-        return all_records
-    
-    def normalize_json_to_dataframe(self, records: list) -> pd.DataFrame:
-        """
-        Normalize SIAE structures JSON to flat DataFrame.
-        
-        Handles nested structures like address, jobs, etc.
-        """
-        if not records:
-            logger.warning("No SIAE structures records received")
-            return pd.DataFrame()
-        
-        # Flatten nested JSON
-        df = pd.json_normalize(
-            records,
-            sep='_',
-            max_level=2  # Limit flattening depth to avoid overly nested columns
+        df = pd.read_csv(
+            io.BytesIO(file_content),
+            dtype=dtype_dict,
+            keep_default_na=False,
+            na_values=['']
         )
         
-        logger.info(f"Normalized {len(df)} SIAE structures records with {len(df.columns)} columns")
-        logger.debug(f"Columns: {list(df.columns)}")
+        # Convert longitude and latitude to float (keeping them as numeric)
+        if 'longitude' in df.columns:
+            df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        if 'latitude' in df.columns:
+            df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+        
+        logger.info(f"Loaded {len(df)} SIAE structures from CSV with {len(df.columns)} columns")
+        return df
+    
+    def transform(self, df: pd.DataFrame, file_path: str) -> pd.DataFrame:
+        """Add ingestion timestamp."""
+        from datetime import datetime
+        import re
+        
+        # Extract date from filename (e.g., structures-inclusion-2025-12-01.csv)
+        filename = file_path.split('/')[-1]
+        match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+        
+        if match:
+            date_str = match.group(1)
+            try:
+                ingestion_timestamp = datetime.strptime(date_str, '%Y-%m-%d')
+                logger.info(f"Extracted timestamp from filename: {ingestion_timestamp}")
+            except ValueError:
+                logger.warning(f"Could not parse date: {date_str}")
+                ingestion_timestamp = datetime.utcnow()
+        else:
+            logger.warning(f"No date found in filename: {filename}")
+            ingestion_timestamp = datetime.utcnow()
+        
+        df['ingestion_timestamp'] = ingestion_timestamp
         
         return df
-

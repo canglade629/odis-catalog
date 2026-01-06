@@ -54,7 +54,7 @@ def main():
         
         # Test 2: INSEE codes preserved
         logger.info("\nTest 2: INSEE codes preserved...")
-        result2 = validator.compare_unique_values("geo", "CODGEO", "dim_commune", "commune_code")
+        result2 = validator.compare_unique_values("geo", "CODGEO", "dim_commune", "commune_insee_code")
         logger.info(f"  {result2}")
         
         # Test 3: Unique SK
@@ -65,7 +65,7 @@ def main():
         # Test 4: No NULLs
         logger.info("\nTest 4: No NULLs in required columns...")
         result4 = validator.validate_no_nulls("dim_commune", 
-            ['commune_sk', 'commune_code', 'commune_label', 'departement_code'])
+            ['commune_sk', 'commune_insee_code', 'commune_label', 'departement_code'])
         logger.info(f"  {result4}")
         
         # Test 5: Metadata columns

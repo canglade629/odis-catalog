@@ -1,4 +1,5 @@
 """API Key authentication middleware."""
+import secrets
 from fastapi import HTTPException, Security, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from google.cloud import firestore
@@ -78,11 +79,59 @@ async def verify_admin_secret(
             detail="Admin secret is missing. Please provide Authorization: Bearer header."
         )
     
-    if credentials.credentials != settings.admin_secret:
+    # Use constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(credentials.credentials, settings.admin_secret):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid admin secret"
         )
     
     return True
+
+
+async def verify_api_key_or_admin(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: firestore.AsyncClient = Depends(get_firestore_client)
+) -> str:
+    """
+    Verify either API key OR admin secret.
+    
+    This allows endpoints to be accessed by both regular users (with API keys)
+    and admins (with admin secret). Admins have full access.
+    
+    Args:
+        credentials: Bearer token credentials from Authorization header
+        db: Firestore async client
+        
+    Returns:
+        The user_id for API keys, or "admin" for admin secret
+        
+    Raises:
+        HTTPException: If neither API key nor admin secret is valid
+    """
+    from app.core.config import get_settings
+    settings = get_settings()
+    
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please provide Authorization: Bearer header."
+        )
+    
+    token = credentials.credentials
+    
+    # First, check if it's the admin secret (constant-time comparison)
+    if secrets.compare_digest(token, settings.admin_secret):
+        return "admin"
+    
+    # If not admin secret, try to validate as API key
+    user_data = await validate_api_key(token, db)
+    
+    if not user_data:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid API key or admin secret"
+        )
+    
+    return user_data["user_id"]
 

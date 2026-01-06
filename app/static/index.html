@@ -13,36 +13,49 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>Odace Data Pipeline</h1>
-            <p>Platform-agnostic data processing for bronze, silver, and gold layers</p>
-        </header>
-
         <div class="api-key-section">
-            <label for="apiKey">API Key:</label>
-            <input type="password" id="apiKey" placeholder="Enter your API key" />
-            <button onclick="saveApiKey()">Save</button>
+            <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
+                <span id="userBadge" class="user-badge" style="display: none;">👥 User</span>
+                <span id="adminBadge" class="admin-badge" style="display: none;">👤 Admin</span>
+            </div>
+            
+            <div id="viewModeToggle" style="display: none; margin-left: auto;">
+                <button onclick="toggleViewMode()" id="viewModeBtn" class="btn-small btn-secondary">
+                    <span id="viewModeIcon">👥</span>
+                    <span id="viewModeText">Switch to User View</span>
+                </button>
+            </div>
+            
+            <button onclick="logout()" id="logoutBtn" style="display: none; margin-left: 10px;" class="btn-small btn-secondary">Logout</button>
         </div>
 
         <nav class="tabs">
             <button class="tab-button active" onclick="showTab('catalogue')">Catalogue</button>
-            <button class="tab-button" onclick="showTab('pipelines')">Pipelines</button>
-            <button class="tab-button" onclick="showTab('history')">History</button>
-            <button class="tab-button" onclick="showTab('logs')">Logs</button>
-            <button class="tab-button" onclick="showTab('files')">Files</button>
-            <button class="tab-button" onclick="showTab('data')">Data</button>
-            <button class="tab-button" onclick="showTab('sql')">SQL Query</button>
-            <button class="tab-button" onclick="showTab('doc')">Doc</button>
+            <button class="tab-button" onclick="showTab('pipelines')" data-admin-only="true">Pipelines</button>
+            <button class="tab-button" onclick="showTab('history')" data-admin-only="true">History</button>
+            <button class="tab-button" onclick="showTab('logs')" data-admin-only="true">Logs</button>
+            <button class="tab-button" onclick="showTab('files')" data-admin-only="true">Files</button>
+            <button class="tab-button" onclick="showTab('data')" data-admin-only="true">Data</button>
+            <button class="tab-button" onclick="showTab('sql')" data-admin-only="true">SQL Query</button>
         </nav>
 
         <div id="catalogue" class="tab-content active">
             <div class="catalog-header">
-                <h2>Catalogue des Tables Silver</h2>
-                <button onclick="loadSilverCatalog()" class="btn-icon" title="Rafraîchir le catalogue">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                    </svg>
-                </button>
+                <h2>Catalogue de la plateforme Odace</h2>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input 
+                        type="text" 
+                        id="catalog-search" 
+                        placeholder="Rechercher une table..." 
+                        onkeyup="filterCatalog()"
+                        style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; min-width: 250px;"
+                    />
+                    <button onclick="refreshSilverCatalog()" class="btn-icon" title="Synchroniser le catalogue (Admin uniquement)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             
             <div id="silver-catalog-grid" class="pipeline-grid">
@@ -267,7 +280,42 @@
                 <button class="modal-close-btn" onclick="closeCatalogModal()">&times;</button>
             </div>
             <div class="modal-body" id="catalog-modal-body">
-                <div class="loading-tasks">Chargement des détails...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-container" onclick="event.stopPropagation()" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 id="confirm-modal-title">Confirmation</h3>
+                <button class="modal-close-btn" onclick="closeConfirmModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-modal-message" style="margin: 20px 0; font-size: 16px; line-height: 1.5; white-space: pre-wrap;"></p>
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 30px;">
+                    <button class="btn btn-secondary" onclick="closeConfirmModal()">Annuler</button>
+                    <button class="btn btn-danger" id="confirm-modal-action" onclick="confirmModalAction()">Confirmer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key Prompt Modal -->
+    <div id="api-key-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-container" onclick="event.stopPropagation()" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>Welcome to Odace Data Pipeline</h3>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 20px;">Please enter your API key to continue:</p>
+                <input type="password" id="apiKeyPromptInput" placeholder="Enter your API key" 
+                       style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 15px;"
+                       onkeypress="if(event.key==='Enter') validateAndSetApiKey()" />
+                <div style="display: flex; justify-content: flex-end;">
+                    <button onclick="validateAndSetApiKey()" class="btn btn-primary">Continue</button>
+                </div>
+                <div id="apiKeyError" style="color: var(--error); margin-top: 10px; display: none;"></div>
             </div>
         </div>
     </div>
@@ -275,37 +323,238 @@
     <script>
         const API_BASE = '';
         let apiKey = localStorage.getItem('apiKey') || '';
+        let adminSecret = localStorage.getItem('adminSecret') || '';
+        let isAdmin = false;
+        let isAdminViewMode = localStorage.getItem('isAdminViewMode') !== 'false'; // Default true for admins
         
-        if (apiKey) {
-            document.getElementById('apiKey').value = apiKey;
+        // Check if we have stored credentials
+        if (adminSecret) {
+            isAdmin = true;
+            apiKey = adminSecret; // Use admin secret for all requests
+        }
+        
+        // Initialize UI based on stored credentials
+        if (apiKey || adminSecret) {
+            if (isAdmin) {
+                showAdminUI();
+            } else {
+                showUserUI();
+            }
+        } else {
+            // No credentials, show prompt modal
+            showApiKeyPrompt();
         }
 
-        function saveApiKey() {
-            apiKey = document.getElementById('apiKey').value;
-            localStorage.setItem('apiKey', apiKey);
-            showStatus('API key saved', 'success');
-            // Load pipelines after saving API key
-            const activeTab = document.querySelector('.tab-content.active');
-            if (activeTab.id === 'pipelines') {
-                loadPipelines();
+        function showApiKeyPrompt() {
+            const modal = document.getElementById('api-key-modal');
+            modal.style.display = 'flex';
+            document.getElementById('apiKeyPromptInput').focus();
+        }
+
+        function hideApiKeyPrompt() {
+            const modal = document.getElementById('api-key-modal');
+            modal.style.display = 'none';
+        }
+
+        async function validateAndSetApiKey() {
+            const input = document.getElementById('apiKeyPromptInput');
+            const errorDiv = document.getElementById('apiKeyError');
+            const key = input.value.trim();
+            
+            if (!key) {
+                errorDiv.textContent = 'Please enter an API key';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            errorDiv.style.display = 'none';
+            
+            // Try to validate as admin by calling an admin endpoint
+            try {
+                const response = await fetch(`${API_BASE}/admin/tables/certifications`, {
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    // It's an admin key
+                    adminSecret = key;
+                    apiKey = key; // Use admin secret for all requests
+                    isAdmin = true;
+                    isAdminViewMode = true;
+                    localStorage.setItem('adminSecret', key);
+                    localStorage.setItem('apiKey', key);
+                    localStorage.setItem('isAdminViewMode', 'true');
+                    hideApiKeyPrompt();
+                    showAdminUI();
+                    showStatus('Logged in as Admin', 'success');
+                    loadSilverCatalog();
+                } else if (response.status === 403 || response.status === 401) {
+                    // Not admin, try as regular user by calling a user endpoint
+                    const userResponse = await fetch(`${API_BASE}/api/data/catalog/silver`, {
+                        headers: {
+                            'Authorization': `Bearer ${key}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (userResponse.ok) {
+                        // Valid user key
+                        apiKey = key;
+                        isAdmin = false;
+                        localStorage.setItem('apiKey', key);
+                        localStorage.removeItem('adminSecret');
+                        localStorage.removeItem('isAdminViewMode');
+                        hideApiKeyPrompt();
+                        showUserUI();
+                        showStatus('Logged in as User', 'success');
+                        loadSilverCatalog();
+                    } else {
+                        errorDiv.textContent = 'Invalid API key. Please try again.';
+                        errorDiv.style.display = 'block';
+                    }
+                } else {
+                    errorDiv.textContent = 'Unable to validate API key. Please try again.';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Error validating API key: ' + error.message;
+                errorDiv.style.display = 'block';
             }
         }
 
+        function showAdminUI() {
+            document.getElementById('adminBadge').style.display = 'inline-block';
+            document.getElementById('userBadge').style.display = 'none';
+            document.getElementById('viewModeToggle').style.display = 'flex';
+            document.getElementById('logoutBtn').style.display = 'inline-block';
+            
+            // Show tab navigation for admins
+            document.querySelector('.tabs').style.display = 'flex';
+            
+            updateTabVisibility();
+            updateViewModeButton();
+        }
+
+        function showUserUI() {
+            document.getElementById('adminBadge').style.display = 'none';
+            document.getElementById('userBadge').style.display = 'inline-block';
+            document.getElementById('viewModeToggle').style.display = 'none';
+            document.getElementById('logoutBtn').style.display = 'inline-block';
+            
+            // Hide tab navigation for users (only Catalogue available)
+            document.querySelector('.tabs').style.display = 'none';
+            
+            updateTabVisibility();
+        }
+
+        function toggleViewMode() {
+            if (!isAdmin) return;
+            
+            isAdminViewMode = !isAdminViewMode;
+            localStorage.setItem('isAdminViewMode', isAdminViewMode.toString());
+            
+            // Update badges and UI based on view mode
+            if (isAdminViewMode) {
+                // Show admin experience
+                document.getElementById('adminBadge').style.display = 'inline-block';
+                document.getElementById('userBadge').style.display = 'none';
+                document.querySelector('.tabs').style.display = 'flex';
+            } else {
+                // Show user experience (even though they're admin)
+                document.getElementById('adminBadge').style.display = 'none';
+                document.getElementById('userBadge').style.display = 'inline-block';
+                document.querySelector('.tabs').style.display = 'none';
+            }
+            
+            updateTabVisibility();
+            updateViewModeButton();
+            
+            // If switching to user view while on admin tab, switch to catalogue
+            const activeTab = document.querySelector('.tab-content.active');
+            if (!isAdminViewMode && activeTab) {
+                const activeTabButton = document.querySelector('.tab-button.active');
+                if (activeTabButton && activeTabButton.hasAttribute('data-admin-only')) {
+                    showTab('catalogue');
+                }
+            }
+            
+            // Re-render the catalogue to update certification buttons
+            if (currentCatalogTables.length > 0) {
+                renderSilverCatalogCards(currentCatalogTables);
+            }
+            
+            showStatus(isAdminViewMode ? 'Switched to Admin View' : 'Switched to User View', 'success');
+        }
+
+        function updateViewModeButton() {
+            const icon = document.getElementById('viewModeIcon');
+            const text = document.getElementById('viewModeText');
+            
+            if (isAdminViewMode) {
+                icon.textContent = '👥';
+                text.textContent = 'Switch to User View';
+            } else {
+                icon.textContent = '👤';
+                text.textContent = 'Switch to Admin View';
+            }
+        }
+
+        function updateTabVisibility() {
+            const adminTabs = document.querySelectorAll('[data-admin-only="true"]');
+            const shouldShow = isAdmin && isAdminViewMode;
+            
+            adminTabs.forEach(tab => {
+                if (shouldShow) {
+                    tab.style.display = 'inline-block';
+                } else {
+                    tab.style.display = 'none';
+                }
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('apiKey');
+            localStorage.removeItem('adminSecret');
+            localStorage.removeItem('isAdminViewMode');
+            apiKey = '';
+            adminSecret = '';
+            isAdmin = false;
+            isAdminViewMode = true;
+            document.getElementById('adminBadge').style.display = 'none';
+            document.getElementById('userBadge').style.display = 'none';
+            document.getElementById('viewModeToggle').style.display = 'none';
+            document.getElementById('logoutBtn').style.display = 'none';
+            showStatus('Logged out', 'info');
+            showApiKeyPrompt();
+        }
+
         function getHeaders() {
+            // For admin users, always use admin secret
+            // For regular users, use their API key
+            const key = isAdmin ? adminSecret : apiKey;
             return {
-                'Authorization': `Bearer ${apiKey}`,
+                'Authorization': `Bearer ${key}`,
                 'Content-Type': 'application/json'
             };
         }
 
+        function getAdminHeaders() {
+            return {
+                'Authorization': `Bearer ${adminSecret}`,
+                'Content-Type': 'application/json'
+            };
+        }
+
+        function saveApiKey() {
+            validateAndSetApiKey();
+        }
+
         function showStatus(message, type = 'info') {
-            const statusDiv = document.getElementById('status');
-            statusDiv.textContent = message;
-            statusDiv.className = `status-message ${type}`;
-            statusDiv.style.display = 'block';
-            setTimeout(() => {
-                statusDiv.style.display = 'none';
-            }, 5000);
+            // Notifications disabled
+            return;
         }
 
         function showTab(tabName) {
@@ -339,9 +588,14 @@
         }
 
         async function loadPipelines() {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             try {
                 const response = await fetch(`${API_BASE}/api/pipeline/list`, {
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 const data = await response.json();
                 
@@ -378,12 +632,17 @@
         }
 
         async function runPipeline(layer, name) {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             showStatus(`Starting ${layer}.${name}...`, 'info');
             
             try {
                 const response = await fetch(`${API_BASE}/api/${layer}/${name}`, {
                     method: 'POST',
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 
                 const data = await response.json();
@@ -399,12 +658,17 @@
         }
 
         async function runFullPipeline(bronzeOnly = false, silverOnly = false) {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             showStatus('Starting full pipeline...', 'info');
             
             try {
                 const response = await fetch(`${API_BASE}/api/pipeline/run`, {
                     method: 'POST',
-                    headers: getHeaders(),
+                    headers: getAdminHeaders(),
                     body: JSON.stringify({
                         bronze_only: bronzeOnly,
                         silver_only: silverOnly,
@@ -427,9 +691,14 @@
         let jobHistoryRefreshInterval = null;
 
         async function loadJobHistory() {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             try {
                 const response = await fetch(`${API_BASE}/api/jobs?limit=20`, {
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 const data = await response.json();
                 
@@ -540,6 +809,11 @@
         }
 
         async function openJobModal(jobId, isRefresh = false) {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             currentModalJobId = jobId;
             const modal = document.getElementById('job-modal');
             const modalTitle = document.getElementById('modal-job-title');
@@ -554,7 +828,7 @@
             // Fetch job details with tasks
             try {
                 const response = await fetch(`${API_BASE}/api/jobs/${jobId}`, {
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 const jobData = await response.json();
                 
@@ -698,6 +972,11 @@
         }
 
         async function stopJob(jobId, event) {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             // Stop event propagation to prevent opening the modal
             if (event) {
                 event.stopPropagation();
@@ -712,7 +991,7 @@
                 
                 const response = await fetch(`${API_BASE}/api/jobs/${jobId}/cancel`, {
                     method: 'POST',
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 
                 const data = await response.json();
@@ -745,6 +1024,11 @@
         }
 
         async function uploadFile() {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             const fileInput = document.getElementById('fileInput');
             const domain = document.getElementById('domain').value;
             
@@ -760,7 +1044,7 @@
                 const response = await fetch(`${API_BASE}/api/files/upload?domain=${domain}`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${apiKey}`
+                        'Authorization': `Bearer ${adminSecret}`
                     },
                     body: formData
                 });
@@ -780,9 +1064,14 @@
         }
 
         async function listFiles() {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             try {
                 const response = await fetch(`${API_BASE}/api/files/list`, {
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 const data = await response.json();
                 
@@ -827,9 +1116,14 @@
         let currentTableName = null;
 
         async function loadCatalog() {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             try {
                 const response = await fetch(`${API_BASE}/api/data/catalog`, {
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 const data = await response.json();
                 
@@ -905,9 +1199,14 @@
         }
 
         async function loadTableMetadata(layer, tableName) {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             try {
                 const response = await fetch(`${API_BASE}/api/data/table/${layer}/${tableName}`, {
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 const metadata = await response.json();
                 
@@ -1032,6 +1331,11 @@
         }
 
         async function loadTablePreview(layer, tableName, filters = null, sortBy = null, sortOrder = 'asc') {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             try {
                 const requestBody = {
                     limit: 100,
@@ -1042,12 +1346,19 @@
                 
                 const response = await fetch(`${API_BASE}/api/data/preview/${layer}/${tableName}`, {
                     method: 'POST',
-                    headers: getHeaders(),
+                    headers: getAdminHeaders(),
                     body: JSON.stringify(requestBody)
                 });
                 
                 if (!response.ok) {
                     const errorData = await response.json();
+                    
+                    // Special handling for certification errors
+                    if (response.status === 403) {
+                        const certError = errorData.detail || 'Access denied';
+                        throw new Error(`🔒 ${certError}`);
+                    }
+                    
                     throw new Error(errorData.detail || `HTTP ${response.status}`);
                 }
                 
@@ -1056,12 +1367,18 @@
                 renderTablePreview(previewData);
             } catch (error) {
                 console.error('Table preview error:', error);
-                showStatus('Error loading table preview: ' + error.message, 'error');
+                
+                // Show more helpful error message for certification issues
+                const errorMsg = error.message.includes('not certified') || error.message.includes('🔒')
+                    ? error.message + ' Contactez un administrateur pour certifier cette table.'
+                    : 'Error loading table preview: ' + error.message;
+                
+                showStatus(errorMsg, 'error');
                 
                 // Try to show error in preview area if it exists
                 const previewDiv = document.getElementById('preview-data');
                 if (previewDiv) {
-                    previewDiv.innerHTML = `<p class="error-text">Error loading preview: ${error.message}</p>`;
+                    previewDiv.innerHTML = `<p class="error-text">${errorMsg}</p>`;
                 }
             }
         }
@@ -1199,9 +1516,14 @@
         let sqlCatalog = null;
 
         async function loadSQLQueryTab() {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             try {
                 const response = await fetch(`${API_BASE}/api/data/catalog`, {
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 const data = await response.json();
                 
@@ -1290,6 +1612,11 @@
         }
 
         async function runSQLQuery() {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             const editor = document.getElementById('sql-editor');
             const sqlQuery = editor.value.trim();
             
@@ -1308,7 +1635,7 @@
             try {
                 const response = await fetch(`${API_BASE}/api/data/query`, {
                     method: 'POST',
-                    headers: getHeaders(),
+                    headers: getAdminHeaders(),
                     body: JSON.stringify({
                         sql: sqlQuery,
                         limit: 1000
@@ -1318,14 +1645,22 @@
                 const data = await response.json();
                 
                 if (!response.ok) {
+                    // Special handling for certification/access errors
+                    if (response.status === 403) {
+                        throw new Error(`🔒 Access Denied: ${data.detail || 'You do not have access to one or more tables in this query.'}`);
+                    } else if (response.status === 400 && data.detail && data.detail.includes('not found')) {
+                        throw new Error(`Table not found. ${data.detail}\n\n💡 Note: Non-admin users can only query certified Silver tables.`);
+                    }
+                    
                     throw new Error(data.detail || 'Query execution failed');
                 }
                 
                 renderQueryResults(data);
                 showStatus(`Query executed successfully (${data.row_count} rows in ${data.execution_time_ms}ms)`, 'success');
             } catch (error) {
-                resultsContent.innerHTML = `<p class="error-text">Error: ${error.message}</p>`;
-                showStatus('Query failed: ' + error.message, 'error');
+                const errorMsg = error.message;
+                resultsContent.innerHTML = `<p class="error-text">${errorMsg.replace(/\n/g, '<br>')}</p>`;
+                showStatus('Query failed: ' + errorMsg, 'error');
             }
         }
 
@@ -1375,6 +1710,8 @@
         }
 
         // Silver Catalog Functions
+        let currentCatalogTables = [];
+        
         async function loadSilverCatalog() {
             try {
                 const gridDiv = document.getElementById('silver-catalog-grid');
@@ -1390,11 +1727,73 @@
                 
                 const data = await response.json();
                 
-                renderSilverCatalogCards(data.tables);
+                // Store tables globally for filtering
+                currentCatalogTables = data.tables;
+                
+                // Clear search and render all tables
+                document.getElementById('catalog-search').value = '';
+                renderSilverCatalogCards(currentCatalogTables);
             } catch (error) {
                 showStatus('Erreur lors du chargement du catalogue: ' + error.message, 'error');
                 const gridDiv = document.getElementById('silver-catalog-grid');
                 gridDiv.innerHTML = '<p class="error-text">Erreur lors du chargement du catalogue</p>';
+            }
+        }
+        
+        function filterCatalog() {
+            const searchTerm = document.getElementById('catalog-search').value.toLowerCase();
+            
+            if (!searchTerm) {
+                // No filter, show all tables
+                renderSilverCatalogCards(currentCatalogTables);
+                return;
+            }
+            
+            // Filter tables by name or description
+            const filteredTables = currentCatalogTables.filter(table => {
+                return table.name.toLowerCase().includes(searchTerm) ||
+                       (table.description_fr && table.description_fr.toLowerCase().includes(searchTerm));
+            });
+            
+            renderSilverCatalogCards(filteredTables);
+            
+            // Show count of filtered results
+            if (filteredTables.length === 0) {
+                const gridDiv = document.getElementById('silver-catalog-grid');
+                gridDiv.innerHTML = `<p class="info-text">Aucune table ne correspond à "${searchTerm}"</p>`;
+            }
+        }
+        
+        async function refreshSilverCatalog() {
+            try {
+                // Clear existing tiles and show loading state
+                const gridDiv = document.getElementById('silver-catalog-grid');
+                gridDiv.innerHTML = '<p class="info-text">Chargement du catalogue...</p>';
+                
+                showStatus('Synchronisation du catalogue depuis le fichier YAML...', 'info');
+                
+                const refreshResponse = await fetch(`${API_BASE}/api/data/catalog/refresh`, {
+                    method: 'POST',
+                    headers: getHeaders()
+                });
+                
+                if (refreshResponse.ok) {
+                    const result = await refreshResponse.json();
+                    showStatus(`Catalogue mis à jour: ${result.tables_synced} tables synchronisées`, 'success');
+                    
+                    // Reload the catalogue display (replaces loading message with tiles)
+                    await loadSilverCatalog();
+                } else {
+                    const errorData = await refreshResponse.json();
+                    showStatus(`Erreur lors de la synchronisation: ${errorData.detail}`, 'error');
+                    // Reload anyway to show what's available
+                    await loadSilverCatalog();
+                }
+            } catch (error) {
+                console.error('Error refreshing catalogue:', error);
+                showStatus(`Erreur lors de la synchronisation du catalogue: ${error.message}`, 'error');
+                // Reload anyway to show what's available
+                await loadSilverCatalog();
             }
         }
 
@@ -1407,7 +1806,17 @@
                 return;
             }
             
-            tables.forEach(table => {
+            // Sort tables: certified first, then alphabetically by name
+            const sortedTables = [...tables].sort((a, b) => {
+                // First priority: certified tables on top
+                if (a.certified !== b.certified) {
+                    return b.certified ? 1 : -1;
+                }
+                // Second priority: alphabetical order
+                return a.name.localeCompare(b.name);
+            });
+            
+            sortedTables.forEach(table => {
                 const card = document.createElement('div');
                 card.className = 'pipeline-card catalog-card';
                 card.onclick = () => showTableDetail(table.name);
@@ -1423,23 +1832,158 @@
                 
                 let metadataHtml = '';
                 if (table.row_count !== null && table.row_count !== undefined) {
+                    const queryCountBadge = table.query_count 
+                        ? `<span class="metadata-badge">${table.query_count.toLocaleString()} requêtes</span>`
+                        : '';
+                    
                     metadataHtml = `
                         <div class="card-metadata">
                             <span class="metadata-badge">${table.row_count.toLocaleString()} lignes</span>
                             <span class="metadata-badge">v${table.version}</span>
+                            ${queryCountBadge}
                         </div>
                     `;
                 }
                 
+                // Certification badge
+                const certBadge = table.certified 
+                    ? '<span class="cert-badge cert-badge-certified">✓ Certifiée</span>'
+                    : '<span class="cert-badge cert-badge-uncertified">⚠ Non certifiée</span>';
+                
+                // Certification button (only for admins)
+                let certButtonHtml = '';
+                if (isAdmin && isAdminViewMode) {
+                    if (table.certified) {
+                        certButtonHtml = `
+                            <button class="btn btn-small btn-secondary cert-button" onclick="uncertifyTable('${table.name}', event)">
+                                Retirer la certification
+                            </button>
+                        `;
+                    } else {
+                        certButtonHtml = `
+                            <button class="btn btn-small btn-primary cert-button" onclick="certifyTable('${table.name}', event)">
+                                Certifier
+                            </button>
+                        `;
+                    }
+                }
+                
                 card.innerHTML = `
-                    <h4>${table.name}</h4>
-                    <p class="table-description-fr">${table.description_fr}</p>
-                    ${dependenciesHtml}
+                    <div style="flex-grow: 1;">
+                        <div class="card-header-with-cert">
+                            <h4>${table.name}</h4>
+                            ${certBadge}
+                        </div>
+                        <p class="table-description-fr">${table.description_fr}</p>
+                        ${dependenciesHtml}
+                    </div>
                     ${metadataHtml}
+                    ${certButtonHtml}
                 `;
                 
                 gridDiv.appendChild(card);
             });
+        }
+
+        async function certifyTable(tableName, event) {
+            // Stop event propagation to prevent opening the modal
+            if (event) {
+                event.stopPropagation();
+            }
+            
+            // Check if user is admin AND in admin view mode
+            if (!isAdmin || !isAdminViewMode) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/tables/certify`, {
+                    method: 'POST',
+                    headers: getAdminHeaders(),
+                    body: JSON.stringify({
+                        table_name: tableName,
+                        layer: 'silver'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showStatus(`Table ${tableName} certifiée avec succès`, 'success');
+                    loadSilverCatalog();
+                } else {
+                    showStatus(`Erreur: ${data.detail}`, 'error');
+                }
+            } catch (error) {
+                showStatus('Erreur lors de la certification: ' + error.message, 'error');
+            }
+        }
+
+        // Confirmation modal functions
+        let confirmModalCallback = null;
+
+        function showConfirmModal(title, message, onConfirm, confirmButtonText = 'Confirmer') {
+            document.getElementById('confirm-modal-title').textContent = title;
+            document.getElementById('confirm-modal-message').textContent = message;
+            document.getElementById('confirm-modal-action').textContent = confirmButtonText;
+            confirmModalCallback = onConfirm;
+            document.getElementById('confirm-modal').style.display = 'flex';
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirm-modal').style.display = 'none';
+            confirmModalCallback = null;
+        }
+
+        function confirmModalAction() {
+            if (confirmModalCallback) {
+                confirmModalCallback();
+            }
+            closeConfirmModal();
+        }
+
+        async function uncertifyTable(tableName, event) {
+            // Stop event propagation to prevent opening the modal
+            if (event) {
+                event.stopPropagation();
+            }
+            
+            // Check if user is admin AND in admin view mode
+            if (!isAdmin || !isAdminViewMode) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
+            // Show confirmation modal
+            showConfirmModal(
+                'Retirer la certification',
+                `Êtes-vous sûr de vouloir retirer la certification de la table "${tableName}" ?\n\nCette action rendra la table inaccessible aux utilisateurs non-administrateurs.`,
+                async () => {
+                    try {
+                        const response = await fetch(`${API_BASE}/admin/tables/uncertify`, {
+                            method: 'POST',
+                            headers: getAdminHeaders(),
+                            body: JSON.stringify({
+                                table_name: tableName,
+                                layer: 'silver'
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            showStatus(`Certification retirée pour ${tableName}`, 'success');
+                            loadSilverCatalog();
+                        } else {
+                            showStatus(`Erreur: ${data.detail}`, 'error');
+                        }
+                    } catch (error) {
+                        showStatus('Erreur lors du retrait de certification: ' + error.message, 'error');
+                    }
+                },
+                'Retirer la certification'
+            );
         }
 
         async function showTableDetail(tableName) {
@@ -1450,7 +1994,6 @@
             // Show modal
             modal.classList.add('active');
             modalTitle.textContent = `Table: ${tableName}`;
-            modalBody.innerHTML = '<div class="loading-tasks">Chargement des détails...</div>';
             
             try {
                 const response = await fetch(`${API_BASE}/api/data/catalog/silver/${tableName}`, {
@@ -1472,6 +2015,14 @@
 
         function renderTableDetail(tableData) {
             const modalBody = document.getElementById('catalog-modal-body');
+            
+            // Certification badge (compact)
+            let certBadgeHtml = '';
+            if (tableData.certified) {
+                certBadgeHtml = '<span class="cert-badge cert-badge-certified" style="margin-left: 10px;">✓ Certifiée</span>';
+            } else {
+                certBadgeHtml = '<span class="cert-badge cert-badge-uncertified" style="margin-left: 10px;">⚠ Non certifiée</span>';
+            }
             
             // Dependencies section
             let dependenciesHtml = '';
@@ -1521,7 +2072,9 @@
             // Preview section
             let previewHtml = '';
             if (tableData.preview && tableData.preview.length > 0) {
-                const columns = Object.keys(tableData.preview[0]);
+                // Use schema field order for consistency
+                const columns = tableData.schema.fields.map(field => field.name);
+                
                 previewHtml = `
                     <div class="modal-section">
                         <h4>Aperçu des Données (10 premières lignes)</h4>
@@ -1551,7 +2104,10 @@
             
             const html = `
                 <div class="table-detail-header">
-                    <h3>${tableData.name}</h3>
+                    <div style="display: flex; align-items: center;">
+                        <h3 style="margin: 0;">${tableData.name}</h3>
+                        ${certBadgeHtml}
+                    </div>
                     <p class="table-description-fr">${tableData.description_fr}</p>
                 </div>
                 ${dependenciesHtml}
@@ -1632,11 +2188,16 @@
         }
 
         async function loadAllLogs() {
+            if (!isAdmin) {
+                showStatus('Admin access required', 'error');
+                return;
+            }
+            
             const terminalOutput = document.getElementById('terminal-output');
             
             try {
                 const response = await fetch(`${API_BASE}/api/jobs/logs/stream?limit=500`, {
-                    headers: getHeaders()
+                    headers: getAdminHeaders()
                 });
                 
                 if (!response.ok) {

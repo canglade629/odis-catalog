@@ -406,6 +406,13 @@ class DeltaOperations:
         for col in df_preview.columns:
             if pd.api.types.is_datetime64_any_dtype(df_preview[col]):
                 df_preview[col] = df_preview[col].astype(str)
+            # Convert dict/struct columns to JSON strings for display
+            elif df_preview[col].dtype == 'object':
+                # Check if the column contains dicts
+                sample = df_preview[col].iloc[0] if len(df_preview) > 0 else None
+                if isinstance(sample, dict):
+                    import json
+                    df_preview[col] = df_preview[col].apply(lambda x: json.dumps(x) if isinstance(x, dict) else x)
         
         records = df_preview.to_dict(orient="records")
         columns = list(df_preview.columns)

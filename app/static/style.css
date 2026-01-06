@@ -600,6 +600,11 @@ button, .btn {
     display: flex;
 }
 
+/* Support for inline style display flex (used by API key modal) */
+.modal-overlay[style*="display: flex"] {
+    display: flex !important;
+}
+
 .modal-container {
     background: var(--bg-secondary);
     border-radius: 8px;
@@ -1432,6 +1437,9 @@ button, .btn {
 .catalog-card {
     cursor: pointer;
     transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .catalog-card:hover {
@@ -1443,8 +1451,8 @@ button, .btn {
     font-size: 0.9rem;
     color: var(--text-secondary);
     margin-bottom: 12px;
-    min-height: 60px;
     line-height: 1.4;
+    flex-grow: 1;
 }
 
 .card-dependencies {
@@ -1466,12 +1474,18 @@ button, .btn {
 }
 
 .metadata-badge {
+    display: inline-block;
     background: var(--info-light);
     color: var(--info);
     padding: 4px 8px;
     border-radius: 3px;
     font-size: 0.8rem;
     font-weight: 500;
+}
+
+.cert-button {
+    margin-top: auto;
+    width: 100%;
 }
 
 /* Catalog Modal Styling */
@@ -1877,6 +1891,107 @@ button, .btn {
 
 #autoRefreshBtn.active:hover {
     background: #45a049;
+}
+
+/* Admin Login Section */
+.admin-login-section {
+    margin-left: 30px;
+    padding-left: 30px;
+    border-left: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.admin-badge {
+    background: var(--primary);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.user-badge {
+    background: var(--info);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* Hide admin-only tabs by default */
+[data-admin-only="true"] {
+    display: none;
+}
+
+/* Certification Badges */
+.cert-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.cert-badge-certified {
+    background: var(--success-light);
+    color: var(--success);
+}
+
+.cert-badge-uncertified {
+    background: var(--warning-light);
+    color: var(--warning);
+}
+
+.card-header-with-cert {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.card-header-with-cert h4 {
+    margin: 0;
+}
+
+.cert-button {
+    margin-top: 10px;
+    width: 100%;
+}
+
+/* Certification Status in Modal */
+.certification-status {
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.certification-status.certified {
+    background: var(--success-light);
+    border-left: 4px solid var(--success);
+}
+
+.certification-status.uncertified {
+    background: var(--warning-light);
+    border-left: 4px solid var(--warning);
+}
+
+.certification-status h4 {
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+}
+
+.certification-status p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.certification-status small {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
 }
 
 #autoRefreshIcon {

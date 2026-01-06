@@ -28,9 +28,9 @@ pipelines:
     
   - name: "gares"
     target_table: "gares"
-    source_path: "api://open_data/d22ba593-90a4-4725-977c-095d1f654d28"
+    source_path: "raw/transport/gares"
     pipeline_class: "app.pipelines.bronze.transport.BronzeGaresPipeline"
-    description: "Raw train stations data from Open Data API"
+    description: "Raw train stations CSV data from gares-de-voyageurs.csv"
     
   - name: "lignes"
     target_table: "lignes"

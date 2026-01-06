@@ -100,7 +100,7 @@ class TestSilverV2Integration:
     def test_no_unexpected_nulls_in_primary_keys(self):
         """Test that no primary keys (SK columns) contain NULLs."""
         tables_and_keys = [
-            ('dim_commune', ['commune_sk', 'commune_code']),
+            ('dim_commune', ['commune_sk', 'commune_insee_code']),
             ('dim_accueillant', ['accueillant_sk']),
             ('dim_gare', ['gare_sk', 'code_uic']),
             ('dim_ligne', ['ligne_sk', 'ligne_code']),
