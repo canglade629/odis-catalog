@@ -41,10 +41,12 @@ You can deploy this app to [Coolify](https://coolify.io) (self-hosted PaaS) in o
 4. **Post-deploy**: Apply the database schema once (e.g. from your machine: `psql -h $PG_DB_HOST ... -f app/db/schema.sql`). Optionally run `python scripts/sync_catalogue_to_db.py` to sync the catalogue from YAML to the DB.
 
 **Coolify troubleshooting (404):**
-- **Ports**: set "Ports Exposed" and "Port Mappings" to **8080** (app listens on 8080).
-- **Custom Docker Options**: leave empty. Options like `--device=/dev/fuse` or `--cap-add SYS_ADMIN` are not needed and can prevent the container from starting.
-- **Logs**: In Coolify, open the application → Logs. Confirm you see "Application startup complete". If the container exits, check for missing env vars (e.g. `ADMIN_SECRET`, PostgreSQL).
-- **Test**: Try `/health` and `/docs`; if they work, the app is up and the UI is at `/`.
+- **Ports**: "Ports Exposed" and "Port Mappings" must be **8080** (app listens on 8080). In the repo, `docker-compose.yml` must map `8080:8080` (Coolify may use it when deploying).
+- **Custom Docker Options**: leave empty (no `--device=/dev/fuse`, etc.).
+- **Runtime logs (critical)**: In Coolify go to the application → **Logs** (runtime/container logs, not build). If the container crashes you will see the error here.
+  - **Success**: you should see `Application startup complete` and `Uvicorn running on http://0.0.0.0:8080`. Then `/`, `/health`, `/docs` should work.
+  - **Crash**: if you see `ValueError: ADMIN_SECRET is set to an insecure value` or `Set DATABASE_URL or PG_DB_...`, add the required env vars in Coolify (Environment Variables) and redeploy. The app **will not start** without a valid `ADMIN_SECRET` (and in production, CORS_ORIGINS must not be `*`).
+- **Env vars**: At minimum set `ADMIN_SECRET` (strong random string), and for full functionality `SCW_*`, `PG_DB_*` or `DATABASE_URL`. Use `ENVIRONMENT=development` and `CORS_ORIGINS=*` only for testing.
 
 ## What is Odace?
 

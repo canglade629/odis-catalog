@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 import numpy as np
 
@@ -217,7 +217,7 @@ class SilverTableDetail(BaseModel):
     name: str
     description_fr: str
     dependencies: List[str]
-    schema: TableSchema
+    table_schema: TableSchema = Field(alias="schema")  # API key "schema"; avoids shadowing BaseModel.schema
     preview: List[Dict[str, Any]]
     certified: bool = False
     certified_at: Optional[str] = None
@@ -402,7 +402,7 @@ async def get_silver_table_detail(
             name=table_name,
             description_fr=pipeline_info.description_fr or "Description non disponible",
             dependencies=pipeline_info.dependencies,
-            schema=table_schema,
+            table_schema=table_schema,
             preview=preview_data,
             certified=cert_status is not None and cert_status.get("certified", False),
             certified_at=cert_status.get("certified_at") if cert_status else None,

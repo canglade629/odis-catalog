@@ -1,0 +1,10 @@
+# Same as docker-compose.yml. Coolify uses docker-compose.yaml by default.
+# Publish 8080:8080 so the proxy can reach the app.
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
