@@ -40,6 +40,12 @@ You can deploy this app to [Coolify](https://coolify.io) (self-hosted PaaS) in o
    - `ADMIN_SECRET`, `ENVIRONMENT`, `CORS_ORIGINS`
 4. **Post-deploy**: Apply the database schema once (e.g. from your machine: `psql -h $PG_DB_HOST ... -f app/db/schema.sql`). Optionally run `python scripts/sync_catalogue_to_db.py` to sync the catalogue from YAML to the DB.
 
+**Coolify troubleshooting (404):**
+- **Ports**: set "Ports Exposed" and "Port Mappings" to **8080** (app listens on 8080).
+- **Custom Docker Options**: leave empty. Options like `--device=/dev/fuse` or `--cap-add SYS_ADMIN` are not needed and can prevent the container from starting.
+- **Logs**: In Coolify, open the application → Logs. Confirm you see "Application startup complete". If the container exits, check for missing env vars (e.g. `ADMIN_SECRET`, PostgreSQL).
+- **Test**: Try `/health` and `/docs`; if they work, the app is up and the UI is at `/`.
+
 ## What is Odace?
 
 Odace is a data pipeline platform that:

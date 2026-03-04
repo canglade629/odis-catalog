@@ -1,5 +1,7 @@
 """Main FastAPI application."""
 import logging
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -41,8 +43,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# Static files directory (relative to this file so it works in Docker/Coolify)
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Include routers
 app.include_router(bronze.router)
@@ -59,13 +62,16 @@ app.include_router(docs.router)
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the main UI."""
+    index_path = STATIC_DIR / "index.html"
     try:
-        with open("app/static/index.html", "r") as f:
-            return HTMLResponse(content=f.read())
-    except FileNotFoundError:
-        return HTMLResponse(
-            content="<h1>Odace Data Pipeline API</h1><p>Visit <a href='/docs'>/docs</a> for API documentation</p>"
-        )
+        if index_path.exists():
+            return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning("Could not serve index.html: %s", e)
+    return HTMLResponse(
+        content="<h1>Odace Data Pipeline API</h1><p><a href='/docs'>/docs</a> – API documentation</p><p><a href='/health'>/health</a> – Health check</p>",
+        status_code=200,
+    )
 
 
 @app.get("/health", response_model=HealthResponse)

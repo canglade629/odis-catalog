@@ -35,7 +35,7 @@ Or with a URL:
 psql "$DATABASE_URL" -f app/db/schema.sql
 ```
 
-Schema file: [app/db/schema.sql](../app/db/schema.sql).
+Schema file: [app/db/schema.sql](../app/db/schema.sql). **Full schema reference:** [POSTGRESQL_SCHEMA.md](POSTGRESQL_SCHEMA.md).
 
 ## Tables
 

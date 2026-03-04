@@ -1,12 +1,13 @@
 # Local run: app container using external Scaleway S3 and PostgreSQL.
 # Usage: docker compose up --build
 # Ensure .env has SCW_*, PG_* (or DATABASE_URL), ADMIN_SECRET.
+# Publish 8080:8080 so Coolify (and local) can reach the app on 8080.
 
 services:
   app:
     build: .
     ports:
-      - "8081:8080"
+      - "8080:8080"
     env_file:
       - .env
     # Optional: pass env explicitly instead of file
