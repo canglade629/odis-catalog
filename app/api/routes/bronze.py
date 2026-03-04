@@ -1,6 +1,6 @@
 """Bronze layer API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.core.auth import verify_admin_secret
+from app.core.auth import verify_admin_secret_or_admin_key
 from app.core.models import PipelineLayer, PipelineStatus
 from app.core.pipeline_executor import PipelineExecutor, get_pipeline_executor
 from app.core.job_manager import JobManager, get_job_manager, JobStatus
@@ -16,7 +16,7 @@ async def run_bronze_pipeline(
     request: Request,
     pipeline_name: str,
     force: bool = False,
-    admin_verified: bool = Depends(verify_admin_secret),
+    admin_verified: bool = Depends(verify_admin_secret_or_admin_key),
     executor: PipelineExecutor = Depends(get_pipeline_executor),
     job_manager: JobManager = Depends(get_job_manager),
 ):

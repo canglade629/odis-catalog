@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 import numpy as np
 
-from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin
+from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin, get_current_user, AuthenticatedUser
 from app.db.session import get_db
 from app.db.repositories.catalogue import catalogue_repo
 from app.core.config import get_settings
@@ -48,42 +48,22 @@ def _make_json_serializable(obj: Any) -> Any:
     return obj
 
 
-async def check_admin_or_raise(credentials: Optional[HTTPAuthorizationCredentials]) -> bool:
-    """
-    Check if request has valid admin credentials.
-    Returns True if admin, False otherwise (doesn't raise).
-    """
-    if not credentials:
-        return False
-    
-    try:
-        from app.core.config import get_settings
-        settings = get_settings()
-        return credentials.credentials == settings.admin_secret
-    except:
-        return False
-
-
 async def verify_table_access(
     layer: str,
     table_name: str,
     session: AsyncSession,
-    credentials: Optional[HTTPAuthorizationCredentials] = None,
+    current_user: AuthenticatedUser,
 ) -> None:
     """
     Verify that the user has access to the specified table.
     
-    - Admins can access any table
+    - Admins (current_user.is_admin) can access any table
     - Regular users can only access certified silver tables
     - Bronze and gold tables require admin access
     
     Raises HTTPException if access is denied.
     """
-    # Check if user is admin
-    is_admin = await check_admin_or_raise(credentials)
-    
-    # Admins can access everything
-    if is_admin:
+    if current_user.is_admin:
         return
     
     # Only silver tables can be accessed by non-admins (if certified)
@@ -476,8 +456,7 @@ async def preview_table(
     layer: str,
     table: str,
     preview_req: PreviewRequest,
-    user_id: str = Depends(verify_api_key_or_admin),
-    credentials: HTTPAuthorizationCredentials = Security(security),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """
@@ -496,7 +475,7 @@ async def preview_table(
         raise HTTPException(status_code=400, detail="Layer must be bronze, silver, or gold")
     
     # Check access permissions
-    await verify_table_access(layer, table, session, credentials)
+    await verify_table_access(layer, table, session, current_user)
     
     # Construct table path
     if layer == "silver":
@@ -538,8 +517,7 @@ async def preview_table(
 async def execute_sql_query(
     request: Request,
     query_req: QueryRequest,
-    user_id: str = Depends(verify_api_key_or_admin),
-    credentials: HTTPAuthorizationCredentials = Security(security),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """
@@ -556,9 +534,8 @@ async def execute_sql_query(
     
     settings = get_settings()
     sql_executor = SQLExecutor()
-    
-    # Check if user is admin
-    is_admin = await check_admin_or_raise(credentials)
+    user_id = current_user.user_id
+    is_admin = current_user.is_admin
     
     try:
         start_time = time.time()

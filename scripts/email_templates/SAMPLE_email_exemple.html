@@ -28,7 +28,7 @@
         
         <div style="background-color: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 4px; margin: 15px 0; overflow-x: auto;">
             <pre style="margin: 0; font-family: 'Courier New', monospace; font-size: 13px;">curl -H "Authorization: Bearer sk_live_EXAMPLE_KEY_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" \
-  https://odace-pipeline-588398598428.europe-west1.run.app/api/endpoint</pre>
+  http://51.159.99.215:8080/api/me</pre>
         </div>
         
         <h3 style="color: #2c3e50; font-size: 16px;">Exemple avec Python :</h3>
@@ -41,17 +41,20 @@ headers = {
 }
 
 response = requests.get(
-    "https://odace-pipeline-588398598428.europe-west1.run.app/api/endpoint",
+    "http://51.159.99.215:8080/api/me",
     headers=headers
 )</pre>
         </div>
         
-        <h2 style="color: #2c3e50; font-size: 18px;">Documentation</h2>
+        <h2 style="color: #2c3e50; font-size: 18px;">Accès à la plateforme</h2>
         
-        <p>Pour plus d'informations sur l'utilisation de l'API, consultez notre documentation interactive :</p>
+        <p>Connectez-vous à l'interface Odace Data Pipeline avec votre clé pour accéder au catalogue, aux pipelines et à la documentation :</p>
         
         <p style="margin: 15px 0;">
-            📚 <a href="https://odace-pipeline-588398598428.europe-west1.run.app/docs" style="color: #3498db; text-decoration: none; font-weight: bold;">Documentation de l'API</a>
+            🌐 <a href="http://51.159.99.215:8080/" style="color: #3498db; text-decoration: none; font-weight: bold;">Odace Data Pipeline</a>
+        </p>
+        <p style="margin: 15px 0;">
+            📚 <a href="http://51.159.99.215:8080/docs" style="color: #3498db; text-decoration: none; font-weight: bold;">Documentation de l'API</a>
         </p>
         
         <h2 style="color: #2c3e50; font-size: 18px;">Informations importantes</h2>
@@ -61,7 +64,7 @@ response = requests.get(
             <ul style="margin: 10px 0; padding-left: 20px;">
                 <li>Ne partagez jamais votre clé API</li>
                 <li>Ne la commitez pas dans votre système de contrôle de version</li>
-                <li>Utilisez toujours HTTPS pour vos requêtes</li>
+                <li>Utilisez toujours HTTPS pour vos requêtes en production</li>
                 <li>Contactez-nous immédiatement si votre clé est compromise</li>
             </ul>
         </div>

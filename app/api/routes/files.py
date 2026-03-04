@@ -1,6 +1,6 @@
 """File upload and management endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
-from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin
+from app.core.auth import verify_api_key, verify_admin_secret_or_admin_key, verify_api_key_or_admin
 from app.core.models import FileUploadResponse
 from app.core.config import get_settings
 from app.utils.s3_ops import get_s3_operations
@@ -16,7 +16,7 @@ async def upload_file(
     request: Request,
     domain: str,
     file: UploadFile = File(...),
-    admin_verified: bool = Depends(verify_admin_secret)
+    admin_verified: bool = Depends(verify_admin_secret_or_admin_key)
 ):
     """
     Upload a file to the raw data folder in S3.

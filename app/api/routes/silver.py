@@ -1,6 +1,6 @@
 """Silver layer API endpoints. Silver is run via DBT (dbt/ project)."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.core.auth import verify_admin_secret
+from app.core.auth import verify_admin_secret_or_admin_key
 from app.core.job_manager import JobManager, get_job_manager, JobStatus
 from app.core.rate_limiter import limiter
 from app.core.dbt_runner import run_dbt_async
@@ -16,7 +16,7 @@ async def run_silver_pipeline(
     request: Request,
     pipeline_name: str,
     force: bool = False,
-    admin_verified: bool = Depends(verify_admin_secret),
+    admin_verified: bool = Depends(verify_admin_secret_or_admin_key),
     job_manager: JobManager = Depends(get_job_manager),
 ):
     """

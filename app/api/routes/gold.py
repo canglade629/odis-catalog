@@ -1,6 +1,6 @@
 """Gold layer API endpoints (placeholder)."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.core.auth import verify_api_key, verify_admin_secret
+from app.core.auth import verify_api_key, verify_admin_secret_or_admin_key
 from app.core.models import PipelineRunResponse
 from app.core.rate_limiter import limiter
 
@@ -13,7 +13,7 @@ async def run_gold_pipeline(
     request: Request,
     pipeline_name: str,
     force: bool = False,
-    admin_verified: bool = Depends(verify_admin_secret)
+    admin_verified: bool = Depends(verify_admin_secret_or_admin_key)
 ):
     """
     Run a specific gold layer pipeline (placeholder).

@@ -5,8 +5,9 @@ This document describes how to use the multi-user API key authentication system.
 ## Overview
 
 The API key system allows you to:
-- Generate secure API keys for different users
-- Validate API keys on each request
+- Generate secure API keys for different users (each with their own `user_id`, e.g. "salma", "ronan")
+- Create **read-only** users by default, or **admin** users by setting `is_admin: true`
+- Validate API keys on each request; the app view (admin vs user) depends on the `is_admin` flag
 - Revoke or delete API keys
 - Track usage (last_used_at timestamp)
 
@@ -36,13 +37,16 @@ All admin endpoints require the `ADMIN_SECRET` in the Authorization header.
 
 ### Create a new API key
 
+By default, new keys are **read-only** (certified silver tables, no pipelines/files). Set `is_admin: true` to create an admin key (full access: pipelines, catalogue, certifications, key management).
+
 ```bash
-POST /api/admin/api-keys
+POST /admin/api-keys
 Authorization: Bearer your-admin-secret-here
 Content-Type: application/json
 
 {
-  "user_id": "user@example.com"
+  "user_id": "salma",
+  "is_admin": true
 }
 ```
 
@@ -50,18 +54,25 @@ Response:
 ```json
 {
   "api_key": "sk_live_...",
-  "user_id": "user@example.com",
+  "user_id": "salma",
+  "is_admin": true,
   "created_at": "2025-01-10T10:30:00.000000",
   "message": "API key created successfully. Save this key - it will not be shown again."
 }
 ```
 
+### Current user (for UI / view mode)
+
+Authenticated clients can call `GET /api/me` with their API key to get `{ "user_id": "...", "is_admin": true|false }`. The frontend uses this to show admin vs user view.
+
 ### List all API keys
 
 ```bash
-GET /api/admin/api-keys
+GET /admin/api-keys
 Authorization: Bearer your-admin-secret-here
 ```
+
+Response entries include `user_id`, `is_admin`, `created_at`, `last_used_at`, `active`.
 
 ### Revoke an API key (soft delete)
 

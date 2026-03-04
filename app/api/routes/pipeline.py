@@ -1,6 +1,6 @@
 """Pipeline orchestration endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin
+from app.core.auth import verify_api_key, verify_admin_secret, verify_admin_secret_or_admin_key, verify_api_key_or_admin
 from app.core.models import (
     FullPipelineRunRequest,
     PipelineRunResponse,
@@ -25,21 +25,21 @@ router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 async def run_full_pipeline(
     request: Request,
     pipeline_request: FullPipelineRunRequest = FullPipelineRunRequest(),
-    admin_verified: bool = Depends(verify_admin_secret),
+    user_id: str = Depends(verify_api_key_or_admin),
+    admin_verified: bool = Depends(verify_admin_secret_or_admin_key),
     executor: PipelineExecutor = Depends(get_pipeline_executor),
 ):
     """
     Run the full data pipeline: bronze (in-process) then silver/gold via DBT.
 
-    **Requires admin authentication.**
+    **Requires admin authentication (admin secret or API key with is_admin=True).**
     """
-
     try:
         job_id, states = await executor.execute_full_pipeline(
             bronze_only=pipeline_request.bronze_only,
             silver_only=pipeline_request.silver_only,
             force=pipeline_request.force,
-            user_id="admin"
+            user_id=user_id
         )
 
         total = len(states)

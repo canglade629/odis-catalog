@@ -2,6 +2,8 @@
 
 Ce dossier contient les emails HTML générés automatiquement pour l'envoi de clés API aux utilisateurs.
 
+**Application hébergée :** [http://51.159.99.215:8080/](http://51.159.99.215:8080/) — Odace Data Pipeline (interface, catalogue, pipelines, documentation API).
+
 ## Fichiers
 
 - Les fichiers sont nommés selon le format : `{email}_api_key_{timestamp}.html`
@@ -37,9 +39,9 @@ Le script vous demandera :
 Chaque email contient :
 - ✅ Message de bienvenue en français
 - ✅ Clé API en évidence
-- ✅ Instructions d'utilisation avec exemples (curl, Python)
+- ✅ Instructions d'utilisation avec exemples (curl, Python) pointant vers `http://51.159.99.215:8080/`
+- ✅ Liens vers l'interface ([http://51.159.99.215:8080/](http://51.159.99.215:8080/)) et la doc API (`/docs`)
 - ✅ Consignes de sécurité
-- ✅ Liens vers la documentation
 - ✅ Détails de création (email, date/heure)
 
 ## Sécurité

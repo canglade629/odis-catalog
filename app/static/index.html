@@ -331,54 +331,39 @@
             
             errorDiv.style.display = 'none';
             
-            // Try to validate as admin by calling an admin endpoint
             try {
-                const response = await fetch(`${API_BASE}/admin/tables/certifications`, {
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                        'Content-Type': 'application/json'
-                    }
+                const response = await fetch(`${API_BASE}/api/me`, {
+                    headers: { 'Authorization': `Bearer ${key}` }
                 });
                 
                 if (response.ok) {
-                    // It's an admin key
-                    adminSecret = key;
-                    apiKey = key; // Use admin secret for all requests
-                    isAdmin = true;
-                    isAdminViewMode = true;
-                    localStorage.setItem('adminSecret', key);
-                    localStorage.setItem('apiKey', key);
-                    localStorage.setItem('isAdminViewMode', 'true');
-                    hideApiKeyPrompt();
-                    showAdminUI();
-                    showStatus('Logged in as Admin', 'success');
-                    loadSilverCatalog();
-                } else if (response.status === 403 || response.status === 401) {
-                    // Not admin, try as regular user by calling a user endpoint
-                    const userResponse = await fetch(`${API_BASE}/api/data/catalog/silver`, {
-                        headers: {
-                            'Authorization': `Bearer ${key}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
+                    const data = await response.json();
+                    const isAdminUser = data.is_admin === true;
+                    const userId = data.user_id || 'User';
                     
-                    if (userResponse.ok) {
-                        // Valid user key
-                        apiKey = key;
-                        isAdmin = false;
-                        localStorage.setItem('apiKey', key);
+                    apiKey = key;
+                    isAdmin = isAdminUser;
+                    isAdminViewMode = isAdminUser;
+                    if (isAdminUser) {
+                        adminSecret = key;
+                        localStorage.setItem('adminSecret', key);
+                        localStorage.setItem('isAdminViewMode', 'true');
+                    } else {
                         localStorage.removeItem('adminSecret');
                         localStorage.removeItem('isAdminViewMode');
-                        hideApiKeyPrompt();
-                        showUserUI();
-                        showStatus('Logged in as User', 'success');
-                        loadSilverCatalog();
-                    } else {
-                        errorDiv.textContent = 'Invalid API key. Please try again.';
-                        errorDiv.style.display = 'block';
                     }
+                    localStorage.setItem('apiKey', key);
+                    hideApiKeyPrompt();
+                    if (isAdminUser) {
+                        showAdminUI();
+                        showStatus('Logged in as ' + userId + ' (Admin)', 'success');
+                    } else {
+                        showUserUI();
+                        showStatus('Logged in as ' + userId, 'success');
+                    }
+                    loadSilverCatalog();
                 } else {
-                    errorDiv.textContent = 'Unable to validate API key. Please try again.';
+                    errorDiv.textContent = 'Invalid API key. Please try again.';
                     errorDiv.style.display = 'block';
                 }
             } catch (error) {

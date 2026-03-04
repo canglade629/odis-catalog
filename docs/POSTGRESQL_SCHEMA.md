@@ -6,12 +6,13 @@ This document describes the PostgreSQL schema used by the Odace backend. The sou
 
 ## api_keys
 
-Stores API key hashes and metadata (replaces Firestore collection `api_keys`; document id was the key hash).
+Stores API key hashes and metadata (replaces Firestore collection `api_keys`; document id was the key hash). `user_id` is the identity (e.g. "salma", "ronan"); `is_admin` controls admin vs read-only access.
 
 | Column       | Type         | Constraints                    |
 |-------------|--------------|--------------------------------|
 | key_hash    | VARCHAR(64)  | PRIMARY KEY                    |
 | user_id     | VARCHAR(512) | NOT NULL                       |
+| is_admin    | BOOLEAN      | NOT NULL, DEFAULT FALSE       |
 | created_at  | TIMESTAMPTZ  | NOT NULL, DEFAULT NOW()        |
 | last_used_at| TIMESTAMPTZ  | —                              |
 | active      | BOOLEAN      | NOT NULL, DEFAULT TRUE         |

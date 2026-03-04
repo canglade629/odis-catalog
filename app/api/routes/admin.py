@@ -37,12 +37,14 @@ router = APIRouter(
 class CreateAPIKeyRequest(BaseModel):
     """Request model for creating a new API key."""
     user_id: str
+    is_admin: bool = False
 
 
 class CreateAPIKeyResponse(BaseModel):
     """Response model for API key creation."""
     api_key: str
     user_id: str
+    is_admin: bool
     created_at: str
     message: str = "API key created successfully. Save this key - it will not be shown again."
 
@@ -61,6 +63,7 @@ class APIKeyInfo(BaseModel):
     """API key metadata (without plaintext key)."""
     hash: str
     user_id: str
+    is_admin: bool
     created_at: Optional[datetime]
     last_used_at: Optional[datetime]
     active: bool
@@ -102,13 +105,15 @@ async def create_new_api_key(
     api_key_request: CreateAPIKeyRequest,
     session: AsyncSession = Depends(get_db),
 ):
-    """Create a new API key for a user. Requires admin authentication."""
-    result = await create_api_key(api_key_request.user_id, session)
-    
+    """Create a new API key for a user. By default read-only; set is_admin=True for admin access. Requires admin authentication."""
+    result = await create_api_key(
+        api_key_request.user_id, session, is_admin=api_key_request.is_admin
+    )
     return CreateAPIKeyResponse(
         api_key=result["api_key"],
         user_id=result["user_id"],
-        created_at=result["created_at"]
+        is_admin=result["is_admin"],
+        created_at=result["created_at"],
     )
 
 

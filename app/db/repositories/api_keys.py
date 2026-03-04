@@ -14,10 +14,12 @@ class ApiKeyRepository:
         session: AsyncSession,
         key_hash: str,
         user_id: str,
+        is_admin: bool = False,
     ) -> None:
         row = ApiKey(
             key_hash=key_hash,
             user_id=user_id,
+            is_admin=is_admin,
             created_at=datetime.utcnow(),
             last_used_at=None,
             active=True,
@@ -36,6 +38,7 @@ class ApiKeyRepository:
             return None
         return {
             "user_id": row.user_id,
+            "is_admin": row.is_admin,
             "created_at": row.created_at,
             "last_used_at": row.last_used_at,
             "active": row.active,
@@ -68,6 +71,7 @@ class ApiKeyRepository:
             {
                 "hash": r.key_hash,
                 "user_id": r.user_id,
+                "is_admin": r.is_admin,
                 "created_at": r.created_at,
                 "last_used_at": r.last_used_at,
                 "active": r.active,

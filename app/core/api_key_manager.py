@@ -19,18 +19,22 @@ def hash_api_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode()).hexdigest()
 
 
-async def create_api_key(user_id: str, session: AsyncSession) -> Dict[str, Any]:
+async def create_api_key(
+    user_id: str, session: AsyncSession, *, is_admin: bool = False
+) -> Dict[str, Any]:
     """
     Generate a new API key and store it in PostgreSQL.
     Replaces any existing key for this user.
+    By default creates a read-only user; set is_admin=True for admin access.
     """
     deleted = await api_key_repo.delete_by_user_id(session, user_id)
     api_key = generate_api_key()
     hashed_key = hash_api_key(api_key)
-    await api_key_repo.create(session, hashed_key, user_id)
+    await api_key_repo.create(session, hashed_key, user_id, is_admin=is_admin)
     return {
         "api_key": api_key,
         "user_id": user_id,
+        "is_admin": is_admin,
         "created_at": datetime.utcnow().isoformat(),
         "replaced": deleted > 0,
     }
@@ -48,6 +52,7 @@ async def validate_api_key(api_key: str, session: AsyncSession) -> Optional[Dict
         pass
     return {
         "user_id": data["user_id"],
+        "is_admin": data.get("is_admin", False),
         "created_at": data["created_at"],
         "last_used_at": data["last_used_at"],
     }

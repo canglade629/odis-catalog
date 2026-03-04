@@ -2,7 +2,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -10,6 +10,7 @@ from datetime import datetime
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.core.auth import get_current_user, AuthenticatedUser
 from app.core.config import get_settings
 from app.core.models import HealthResponse
 from app.core.rate_limiter import limiter
@@ -72,6 +73,12 @@ async def root():
         content="<h1>Odace Data Pipeline API</h1><p><a href='/docs'>/docs</a> – API documentation</p><p><a href='/health'>/health</a> – Health check</p>",
         status_code=200,
     )
+
+
+@app.get("/api/me")
+async def get_me(current_user: AuthenticatedUser = Depends(get_current_user)):
+    """Return current user info (user_id, is_admin) for the given API key or admin secret."""
+    return {"user_id": current_user.user_id, "is_admin": current_user.is_admin}
 
 
 @app.get("/health", response_model=HealthResponse)
