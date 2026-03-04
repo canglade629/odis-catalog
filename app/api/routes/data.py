@@ -392,8 +392,8 @@ async def get_silver_table_detail(
             num_fields=cached_schema.get('num_fields', len(fields))
         )
         
-        # Get preview from cached data
-        preview_data = table_catalogue.get('preview', [])
+        # Get preview from cached data (ensure JSON-serializable for response)
+        preview_data = _make_json_serializable(table_catalogue.get('preview', []))
         
         # Get certification status
         cert_status = await get_certification_status("silver", table_name, session)
@@ -401,7 +401,7 @@ async def get_silver_table_detail(
         return SilverTableDetail(
             name=table_name,
             description_fr=pipeline_info.description_fr or "Description non disponible",
-            dependencies=pipeline_info.dependencies,
+            dependencies=pipeline_info.dependencies or [],
             table_schema=table_schema,
             preview=preview_data,
             certified=cert_status is not None and cert_status.get("certified", False),
