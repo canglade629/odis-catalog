@@ -76,7 +76,7 @@ The admin secret (`ADMIN_SECRET` environment variable) provides full access to:
 ### Regular User - Query Certified Table
 ```bash
 # Works if table is certified
-curl -X POST https://your-deployment-url/api/data/query \
+curl -X POST https://odace.services.d4g.fr/api/data/query \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"sql": "SELECT * FROM silver_dim_commune LIMIT 10"}'
@@ -85,20 +85,20 @@ curl -X POST https://your-deployment-url/api/data/query \
 ### Regular User - Try to Run Pipeline
 ```bash
 # Returns: {"detail": "Invalid admin secret"}
-curl -X POST https://your-deployment-url/api/pipeline/run \
+curl -X POST https://odace.services.d4g.fr/api/pipeline/run \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
 ### Admin - Run Pipeline
 ```bash
 # Works with admin secret
-curl -X POST https://your-deployment-url/api/pipeline/run \
+curl -X POST https://odace.services.d4g.fr/api/pipeline/run \
   -H "Authorization: Bearer YOUR_ADMIN_SECRET"
 ```
 
 ### Admin - Certify Table
 ```bash
-curl -X POST https://your-deployment-url/admin/tables/certify \
+curl -X POST https://odace.services.d4g.fr/admin/tables/certify \
   -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"table_name": "dim_commune", "layer": "silver"}'
@@ -150,7 +150,7 @@ curl -X POST https://your-deployment-url/admin/tables/certify \
 Admins can create API keys for users:
 
 ```bash
-curl -X POST https://your-deployment-url/admin/api-keys \
+curl -X POST https://odace.services.d4g.fr/admin/api-keys \
   -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"user_id": "user@example.com"}'

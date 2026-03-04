@@ -77,7 +77,7 @@ INFO:     Application startup complete.
 ```bash
 # Test with your new admin secret
 curl -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
-     http://localhost:8080/api/pipeline/list
+     https://odace.services.d4g.fr/api/pipeline/list
 ```
 
 If you see an error about insecure admin secret, you need to use a different value.
@@ -113,7 +113,7 @@ Deploy via Docker/Coolify (see README).
 **Test Health Endpoint:**
 ```bash
 # Use your deployment URL (e.g. from Coolify)
-SERVICE_URL="https://your-deployment-url"
+SERVICE_URL="https://odace.services.d4g.fr"
 curl $SERVICE_URL/health
 ```
 

@@ -256,7 +256,7 @@ These endpoints now respect certification status:
 import requests
 
 # Configuration
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://odace.services.d4g.fr"  # or http://localhost:8080 for local
 ADMIN_SECRET = "your_admin_secret"
 API_KEY = "your_api_key"
 

@@ -113,7 +113,7 @@ Example with curl:
 
 ```bash
 curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-  https://your-deployment-url/api/endpoint
+  https://odace.services.d4g.fr/api/endpoint
 ```
 
 Example with Python requests:
@@ -124,7 +124,7 @@ import requests
 headers = {
     "Authorization": "Bearer sk_live_YOUR_API_KEY"
 }
-response = requests.get("https://your-deployment-url/api/endpoint", headers=headers)
+response = requests.get("https://odace.services.d4g.fr/api/endpoint", headers=headers)
 ```
 
 ### Authentication Errors

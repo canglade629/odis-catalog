@@ -125,7 +125,7 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 # 3. Test authentication
 curl -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
-     http://localhost:8080/api/pipeline/list
+     https://odace.services.d4g.fr/api/pipeline/list
 ```
 
 ### Production Deploy:
@@ -164,7 +164,7 @@ curl -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
 curl http://localhost:8080/health
 
 # Production
-curl https://your-deployment-url/health
+curl https://odace.services.d4g.fr/health
 ```
 
 Expected:
@@ -256,7 +256,7 @@ Before deploying to production:
 ```bash
 # Set variables
 export ADMIN_SECRET="your-secret-here"
-export SERVICE_URL="http://localhost:8080"  # or your deployment URL
+export SERVICE_URL="https://odace.services.d4g.fr"  # or http://localhost:8080 for local
 
 # 1. Health check
 curl $SERVICE_URL/health && echo "✅ App is running"

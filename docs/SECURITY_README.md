@@ -84,7 +84,7 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 # In another terminal, test it works:
 curl -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
-     http://localhost:8080/api/pipeline/list
+     https://odace.services.d4g.fr/api/pipeline/list
 ```
 
 If you see a list of pipelines: ✅ **You're ready!**
@@ -123,7 +123,7 @@ Before deploying:
 
 ```bash
 # Use your deployment URL (e.g. Coolify or custom domain)
-SERVICE_URL="https://your-deployment-url"
+SERVICE_URL="https://odace.services.d4g.fr"
 
 # Test health
 curl $SERVICE_URL/health

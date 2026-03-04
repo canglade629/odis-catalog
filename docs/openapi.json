@@ -12,6 +12,10 @@
     },
     "version": "1.0.0"
   },
+  "servers": [
+    { "url": "https://odace.services.d4g.fr", "description": "Production (Coolify)" },
+    { "url": "http://localhost:8080", "description": "Local development" }
+  ],
   "paths": {
     "/api/bronze/{pipeline_name}": {
       "post": {

@@ -21,7 +21,7 @@ The app runs in a container using **Scaleway S3** for storage and **PostgreSQL**
    docker compose up --build
    # Or: docker build -t odace-pipeline . && docker run -p 8080:8080 --env-file .env odace-pipeline
    ```
-   API: http://localhost:8080. Health: http://localhost:8080/health.
+   API: http://localhost:8080. Health: http://localhost:8080/health. **Production:** [https://odace.services.d4g.fr](https://odace.services.d4g.fr) (Coolify).
 
 4. **Optional – sync catalogue from YAML to DB**:
    ```bash
@@ -41,7 +41,7 @@ You can deploy this app to [Coolify](https://coolify.io) (self-hosted PaaS) in o
 4. **Post-deploy**: Apply the database schema once (e.g. from your machine: `psql -h $PG_DB_HOST ... -f app/db/schema.sql`). Optionally run `python scripts/sync_catalogue_to_db.py` to sync the catalogue from YAML to the DB.
 
 **Coolify troubleshooting (404):**
-- **Ports**: "Ports Exposed" and "Port Mappings" must be **8080** (app listens on 8080). In the repo, `docker-compose.yml` must map `8080:8080` (Coolify may use it when deploying).
+- **Ports**: Do not bind host ports; the repo uses `ports: ["8080"]` and Traefik labels for **https://odace.services.d4g.fr**.
 - **Custom Docker Options**: leave empty (no `--device=/dev/fuse`, etc.).
 - **Runtime logs (critical)**: In Coolify go to the application → **Logs** (runtime/container logs, not build). If the container crashes you will see the error here.
   - **Success**: you should see `Application startup complete` and `Uvicorn running on http://0.0.0.0:8080`. Then `/`, `/health`, `/docs` should work.
@@ -65,7 +65,7 @@ If you've received an API key, you can use the Odace API to trigger data pipelin
 
 - An API key (format: `sk_live_...`)
 - HTTP client (curl, Postman, Python requests, etc.)
-- API endpoint URL (provided by your administrator)
+- API endpoint URL: **https://odace.services.d4g.fr** (or provided by your administrator)
 
 ### Authentication
 
@@ -80,20 +80,20 @@ Authorization: Bearer sk_live_YOUR_API_KEY
 1. **Test your API key**:
    ```bash
    curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-        https://your-deployment-url/api/pipeline/list
+        https://odace.services.d4g.fr/api/pipeline/list
    ```
 
 2. **View available pipelines**:
    ```bash
    curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-        https://your-deployment-url/api/pipeline/list?layer=bronze
+        https://odace.services.d4g.fr/api/pipeline/list?layer=bronze
    ```
 
 3. **Run a pipeline**:
    ```bash
    curl -X POST \
         -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-        https://your-deployment-url/api/bronze/geo
+        https://odace.services.d4g.fr/api/bronze/geo
    ```
 
 ## Core API Endpoints
@@ -139,7 +139,7 @@ curl -X POST \
   -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"force": true}' \
-  https://your-deployment-url/api/pipeline/run
+  https://odace.services.d4g.fr/api/pipeline/run
 ```
 
 **Expected Response**:
@@ -179,7 +179,7 @@ curl -X POST \
     "silver_only": false,
     "force": true
   }' \
-  https://your-deployment-url/api/pipeline/run
+  https://odace.services.d4g.fr/api/pipeline/run
 ```
 - **Executes**: 6 bronze + 6 silver = 12 total pipelines
 - **Duration**: ~2-3 minutes
@@ -195,7 +195,7 @@ curl -X POST \
     "bronze_only": true,
     "force": true
   }' \
-  https://your-deployment-url/api/pipeline/run
+  https://odace.services.d4g.fr/api/pipeline/run
 ```
 - **Executes**: 6 bronze pipelines
 - **Duration**: ~1-2 minutes
@@ -211,7 +211,7 @@ curl -X POST \
     "silver_only": true,
     "force": true
   }' \
-  https://your-deployment-url/api/pipeline/run
+  https://odace.services.d4g.fr/api/pipeline/run
 ```
 - **Executes**: 6 silver pipelines
 - **Duration**: ~1 minute
@@ -226,7 +226,7 @@ curl -X POST \
   -d '{
     "force": false
   }' \
-  https://your-deployment-url/api/pipeline/run
+  https://odace.services.d4g.fr/api/pipeline/run
 ```
 - **Executes**: Only pipelines with new data
 - **Duration**: Varies (only processes changes)
@@ -246,13 +246,13 @@ curl -X POST \
 **1. Check job status**:
 ```bash
 curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-  https://your-deployment-url/api/jobs/{job_id}
+  https://odace.services.d4g.fr/api/jobs/{job_id}
 ```
 
 **2. List recent jobs**:
 ```bash
 curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-  https://your-deployment-url/api/jobs?limit=10
+  https://odace.services.d4g.fr/api/jobs?limit=10
 ```
 
 **3. View task details**:
@@ -328,7 +328,7 @@ curl -X POST \
   -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"force": true}' \
-  https://your-deployment-url/api/pipeline/run
+  https://odace.services.d4g.fr/api/pipeline/run
 ```
 
 The pipeline is **idempotent**, so re-running will clear the error and produce correct results.
@@ -364,14 +364,14 @@ Example with curl:
 curl -X POST \
      -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
      -F "file=@myfile.csv" \
-     "https://your-deployment-url/api/files/upload?domain=logement"
+     "https://odace.services.d4g.fr/api/files/upload?domain=logement"
 ```
 
 ### API Documentation
 
 Visit the interactive API documentation at:
 ```
-https://your-deployment-url/docs
+https://odace.services.d4g.fr/docs
 ```
 
 ## Available Pipelines
@@ -559,8 +559,8 @@ For developers setting up the project locally:
    ```
 
 4. **Access locally**:
-   - UI: http://localhost:8080
-   - API Docs: http://localhost:8080/docs
+   - UI: http://localhost:8080 (local) or https://odace.services.d4g.fr (production)
+   - API Docs: http://localhost:8080/docs or https://odace.services.d4g.fr/docs
 
 Storage: [Scaleway S3](docs/SCALEWAY_S3.md). Database: [PostgreSQL](docs/POSTGRESQL.md). Pipelines: [docs/pipelines.md](docs/pipelines.md).
 
