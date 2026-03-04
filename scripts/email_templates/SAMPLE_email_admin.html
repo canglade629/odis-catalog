@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votre clé API ODACE – Accès administrateur</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    
+    <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
+        <h1 style="color: #2c3e50; margin-top: 0;">Bienvenue sur l'API ODACE – Accès administrateur</h1>
+        
+        <p>Bonjour {{RECIPIENT_NAME}},</p>
+        
+        <p>Votre clé API <strong>administrateur</strong> a été créée. Elle vous donne un accès complet à la plateforme Odace Data Pipeline : exécution des pipelines (bronze, silver, gold), gestion du catalogue, certification des tables, gestion des clés API et des fichiers.</p>
+        
+        <div style="background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 20px; margin: 25px 0; border-radius: 4px;">
+            <h2 style="color: #2c3e50; margin-top: 0; font-size: 16px;">Votre clé API :</h2>
+            <code style="background-color: #fff; padding: 12px; display: block; border-radius: 4px; font-size: 14px; word-wrap: break-word; font-family: 'Courier New', monospace; color: #e74c3c; font-weight: bold;">{{API_KEY}}</code>
+            <p style="margin-bottom: 0; font-size: 12px; color: #7f8c8d; margin-top: 10px;">
+                <strong>⚠️ Important :</strong> Conservez cette clé en lieu sûr. Elle ne sera plus affichée après cet email.
+            </p>
+        </div>
+        
+        <h2 style="color: #2c3e50; font-size: 18px;">Droits administrateur</h2>
+        <ul style="margin: 10px 0; padding-left: 20px;">
+            <li>Lancer les pipelines (bronze, silver, gold)</li>
+            <li>Gérer le catalogue et certifier les tables</li>
+            <li>Uploader des fichiers et gérer les données</li>
+            <li>Consulter l’historique des jobs et les logs</li>
+            <li>Créer ou révoquer des clés API pour d’autres utilisateurs</li>
+        </ul>
+        
+        <h2 style="color: #2c3e50; font-size: 18px;">Accès à la plateforme</h2>
+        <p>Connectez-vous à l’interface avec votre clé pour accéder au tableau de bord admin :</p>
+        <p style="margin: 15px 0;">
+            🌐 <a href="http://51.159.99.215:8080/" style="color: #3498db; text-decoration: none; font-weight: bold;">Odace Data Pipeline</a>
+        </p>
+        <p style="margin: 15px 0;">
+            📚 <a href="http://51.159.99.215:8080/docs" style="color: #3498db; text-decoration: none; font-weight: bold;">Documentation de l’API</a>
+        </p>
+        
+        <h2 style="color: #2c3e50; font-size: 18px;">Sécurité</h2>
+        <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <ul style="margin: 10px 0; padding-left: 20px;">
+                <li>Ne partagez jamais votre clé API</li>
+                <li>Ne la commitez pas dans votre système de contrôle de version</li>
+                <li>Utilisez HTTPS en production</li>
+                <li>Contactez-nous si votre clé est compromise</li>
+            </ul>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+            <p style="color: #7f8c8d; font-size: 13px; margin: 5px 0;">
+                <strong>Détails :</strong> {{RECIPIENT_NAME}} (admin) — Créée le : {{CREATED_AT}}
+            </p>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+            <p style="color: #7f8c8d; font-size: 14px;">Cordialement,<br><strong>L’équipe ODACE</strong></p>
+        </div>
+    </div>
+    
+    <div style="text-align: center; color: #95a5a6; font-size: 12px; margin-top: 20px;">
+        <p>Cet email a été généré automatiquement. Merci de ne pas y répondre.</p>
+    </div>
+    
+</body>
+</html>

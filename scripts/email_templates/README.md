@@ -6,9 +6,11 @@ Ce dossier contient les emails HTML générés automatiquement pour l'envoi de c
 
 ## Fichiers
 
-- Les fichiers sont nommés selon le format : `{email}_api_key_{timestamp}.html`
-- Exemple : `user_example_com_api_key_20250129_143052.html`
-- `SAMPLE_email_exemple.html` : Un exemple de template pour prévisualisation
+- Les fichiers sont nommés selon le format : `{nom}_api_key_{timestamp}.html` (ex. `salma_api_key_20260304_155440.html`)
+- **Templates (samples, sans clé réelle) :**
+  - `SAMPLE_email_exemple.html` : Exemple générique pour prévisualisation
+  - `SAMPLE_email_admin.html` : Template **administrateur** (placeholders : `{{RECIPIENT_NAME}}`, `{{API_KEY}}`, `{{CREATED_AT}}`) — à utiliser pour les clés créées avec `is_admin: true`
+  - `SAMPLE_email_user.html` : Template **utilisateur** (lecture seule, tables silver certifiées) — à utiliser plus tard pour les clés avec `is_admin: false`
 
 ## Utilisation
 

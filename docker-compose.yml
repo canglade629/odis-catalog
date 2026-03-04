@@ -1,18 +1,24 @@
 # Local run: app container using external Scaleway S3 and PostgreSQL.
 # Usage: docker compose up --build
 # Ensure .env has SCW_*, PG_* (or DATABASE_URL), ADMIN_SECRET.
-# Publish 8080:8080 so Coolify (and local) can reach the app on 8080.
-# Traefik label ensures Coolify's proxy forwards to port 8080.
+# Coolify: no host port binding; Traefik routes via odace.services.d4g.fr.
 
 services:
   app:
     build: .
     ports:
-      - "8080:8080"
+      - "8080"
     env_file:
       - .env
     labels:
-      - "traefik.http.services.app.loadbalancer.server.port=8080"
+      - traefik.enable=true
+      - traefik.http.routers.odace.rule=Host(`odace.services.d4g.fr`)
+      - traefik.http.routers.odace.entryPoints=webtls
+      - traefik.http.routers.odace.tls=true
+      - traefik.docker.network=d4g-internal
+      - traefik.http.services.odace.loadbalancer.server.port=8080
+    networks:
+      - d4g-internal
     # Optional: pass env explicitly instead of file
     # environment:
     #   - SCW_OBJECT_STORAGE_ENDPOINT=${SCW_OBJECT_STORAGE_ENDPOINT}
@@ -25,3 +31,7 @@ services:
     #   - ADMIN_SECRET=${ADMIN_SECRET}
     #   - ENVIRONMENT=${ENVIRONMENT}
     #   - CORS_ORIGINS=${CORS_ORIGINS}
+
+networks:
+  d4g-internal:
+    external: true

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votre clé API ODACE – Accès utilisateur</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    
+    <div style="background-color: #f8f9fa; border-radius: 8px; padding: 30px; margin-bottom: 20px;">
+        <h1 style="color: #2c3e50; margin-top: 0;">Bienvenue sur l'API ODACE – Accès utilisateur</h1>
+        
+        <p>Bonjour {{RECIPIENT_NAME}},</p>
+        
+        <p>Votre clé API a été créée. Elle vous permet d’accéder en <strong>lecture seule</strong> aux tables silver certifiées de la plateforme Odace (catalogue, requêtes SQL, documentation des données).</p>
+        
+        <div style="background-color: #fff; border-left: 4px solid #3498db; padding: 20px; margin: 25px 0; border-radius: 4px;">
+            <h2 style="color: #2c3e50; margin-top: 0; font-size: 16px;">Votre clé API :</h2>
+            <code style="background-color: #f8f9fa; padding: 12px; display: block; border-radius: 4px; font-size: 14px; word-wrap: break-word; font-family: 'Courier New', monospace; color: #e74c3c; font-weight: bold;">{{API_KEY}}</code>
+            <p style="margin-bottom: 0; font-size: 12px; color: #7f8c8d; margin-top: 10px;">
+                <strong>⚠️ Important :</strong> Conservez cette clé en lieu sûr. Elle ne sera plus affichée après cet email.
+            </p>
+        </div>
+        
+        <h2 style="color: #2c3e50; font-size: 18px;">Droits utilisateur (lecture seule)</h2>
+        <ul style="margin: 10px 0; padding-left: 20px;">
+            <li>Consulter le catalogue des tables silver certifiées</li>
+            <li>Exécuter des requêtes SQL sur les tables auxquelles vous avez accès</li>
+            <li>Consulter la documentation du modèle de données</li>
+        </ul>
+        <p style="font-size: 14px; color: #7f8c8d;">Vous ne pouvez pas lancer de pipelines, certifier des tables ni gérer des clés API. Pour un accès étendu, contactez votre administrateur.</p>
+        
+        <h2 style="color: #2c3e50; font-size: 18px;">Accès à la plateforme</h2>
+        <p>Connectez-vous à l’interface avec votre clé :</p>
+        <p style="margin: 15px 0;">
+            🌐 <a href="http://51.159.99.215:8080/" style="color: #3498db; text-decoration: none; font-weight: bold;">Odace Data Pipeline</a>
+        </p>
+        <p style="margin: 15px 0;">
+            📚 <a href="http://51.159.99.215:8080/docs" style="color: #3498db; text-decoration: none; font-weight: bold;">Documentation de l’API</a>
+        </p>
+        
+        <h2 style="color: #2c3e50; font-size: 18px;">Sécurité</h2>
+        <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <ul style="margin: 10px 0; padding-left: 20px;">
+                <li>Ne partagez jamais votre clé API</li>
+                <li>Ne la commitez pas dans votre système de contrôle de version</li>
+                <li>Utilisez HTTPS en production</li>
+                <li>Contactez-nous si votre clé est compromise</li>
+            </ul>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+            <p style="color: #7f8c8d; font-size: 13px; margin: 5px 0;">
+                <strong>Détails :</strong> {{RECIPIENT_NAME}} (utilisateur) — Créée le : {{CREATED_AT}}
+            </p>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+            <p style="color: #7f8c8d; font-size: 14px;">Cordialement,<br><strong>L’équipe ODACE</strong></p>
+        </div>
+    </div>
+    
+    <div style="text-align: center; color: #95a5a6; font-size: 12px; margin-top: 20px;">
+        <p>Cet email a été généré automatiquement. Merci de ne pas y répondre.</p>
+    </div>
+    
+</body>
+</html>

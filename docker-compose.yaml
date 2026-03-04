@@ -1,13 +1,23 @@
 # Same as docker-compose.yml. Coolify uses docker-compose.yaml by default.
-# Publish 8080:8080 so the proxy can reach the app.
-# Traefik port label ensures Coolify's proxy forwards to container port 8080.
+# No host port binding; Traefik routes via odace.services.d4g.fr.
 
 services:
   app:
     build: .
     ports:
-      - "8080:8080"
+      - "8080"
     env_file:
       - .env
     labels:
-      - "traefik.http.services.app.loadbalancer.server.port=8080"
+      - traefik.enable=true
+      - traefik.http.routers.odace.rule=Host(`odace.services.d4g.fr`)
+      - traefik.http.routers.odace.entryPoints=webtls
+      - traefik.http.routers.odace.tls=true
+      - traefik.docker.network=d4g-internal
+      - traefik.http.services.odace.loadbalancer.server.port=8080
+    networks:
+      - d4g-internal
+
+networks:
+  d4g-internal:
+    external: true
