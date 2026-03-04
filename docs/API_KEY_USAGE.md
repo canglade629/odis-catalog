@@ -13,7 +13,7 @@ The API key system allows you to:
 ## Security Features
 
 - **Secure Generation**: Keys use 256 bits of entropy via Python's `secrets` module
-- **Hashed Storage**: Keys are hashed with SHA-256 before storage in Firestore
+- **Hashed Storage**: Keys are hashed with SHA-256 before storage in PostgreSQL
 - **Bearer Token Auth**: Industry-standard `Authorization: Bearer` header
 - **Soft Delete**: Keys can be revoked (active=false) for audit trail
 - **Admin Protection**: Key management endpoints protected by separate admin secret
@@ -25,63 +25,19 @@ The API key system allows you to:
 Update your `.env` file:
 
 ```bash
-# Remove the old API_KEY
-# API_KEY=odace-api-key-2024  # DELETE THIS
-
-# Add the new ADMIN_SECRET
 ADMIN_SECRET=your-secure-admin-secret-here
 ```
 
-The `ADMIN_SECRET` protects the admin endpoints for creating/managing API keys.
+The `ADMIN_SECRET` protects the admin endpoints for creating/managing API keys. Also configure PostgreSQL (see [POSTGRESQL.md](POSTGRESQL.md)).
 
-## Managing API Keys
-
-### Method 1: CLI Tool (Recommended for Manual Management)
-
-#### Create a new API key
-
-```bash
-python scripts/manage_api_keys.py create user@example.com
-```
-
-Output:
-```
-✅ API Key Created Successfully!
-================================================================================
-User ID:    user@example.com
-API Key:    odace_example_api_key_1234567890abcdefgh
-Created At: 2025-01-10T10:30:00.000000
-================================================================================
-
-⚠️  IMPORTANT: Save this API key securely. It will not be shown again!
-```
-
-#### List all API keys
-
-```bash
-python scripts/manage_api_keys.py list
-```
-
-#### Revoke an API key (soft delete)
-
-```bash
-python scripts/manage_api_keys.py revoke odace_example_api_key_1234567890abcdefgh
-```
-
-#### Permanently delete an API key
-
-```bash
-python scripts/manage_api_keys.py delete odace_example_api_key_1234567890abcdefgh
-```
-
-### Method 2: Admin API Endpoints
+## Managing API Keys (Admin API)
 
 All admin endpoints require the `ADMIN_SECRET` in the Authorization header.
 
-#### Create a new API key
+### Create a new API key
 
 ```bash
-POST /admin/api-keys
+POST /api/admin/api-keys
 Authorization: Bearer your-admin-secret-here
 Content-Type: application/json
 
@@ -93,41 +49,41 @@ Content-Type: application/json
 Response:
 ```json
 {
-  "api_key": "odace_example_api_key_1234567890abcdefgh",
+  "api_key": "sk_live_...",
   "user_id": "user@example.com",
   "created_at": "2025-01-10T10:30:00.000000",
   "message": "API key created successfully. Save this key - it will not be shown again."
 }
 ```
 
-#### List all API keys
+### List all API keys
 
 ```bash
-GET /admin/api-keys
+GET /api/admin/api-keys
 Authorization: Bearer your-admin-secret-here
 ```
 
-#### Revoke an API key
+### Revoke an API key (soft delete)
 
 ```bash
-DELETE /admin/api-keys/revoke
+DELETE /api/admin/api-keys/revoke
 Authorization: Bearer your-admin-secret-here
 Content-Type: application/json
 
 {
-  "api_key": "odace_example_api_key_1234567890abcdefgh"
+  "api_key": "sk_live_..."
 }
 ```
 
-#### Permanently delete an API key
+### Permanently delete an API key
 
 ```bash
-DELETE /admin/api-keys/delete
+DELETE /api/admin/api-keys/delete
 Authorization: Bearer your-admin-secret-here
 Content-Type: application/json
 
 {
-  "api_key": "odace_example_api_key_1234567890abcdefgh"
+  "api_key": "sk_live_..."
 }
 ```
 
@@ -139,14 +95,14 @@ Users must include their API key in the `Authorization` header with the `Bearer`
 
 ```bash
 GET /api/endpoint
-Authorization: Bearer odace_example_api_key_1234567890abcdefgh
+Authorization: Bearer sk_live_YOUR_API_KEY
 ```
 
 Example with curl:
 
 ```bash
-curl -H "Authorization: Bearer odace_example_api_key_1234567890abcdefgh" \
-  https://your-api.com/api/endpoint
+curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
+  https://your-deployment-url/api/endpoint
 ```
 
 Example with Python requests:
@@ -155,10 +111,9 @@ Example with Python requests:
 import requests
 
 headers = {
-    "Authorization": "Bearer odace_example_api_key_1234567890abcdefgh"
+    "Authorization": "Bearer sk_live_YOUR_API_KEY"
 }
-
-response = requests.get("https://your-api.com/api/endpoint", headers=headers)
+response = requests.get("https://your-deployment-url/api/endpoint", headers=headers)
 ```
 
 ### Authentication Errors
@@ -166,60 +121,32 @@ response = requests.get("https://your-api.com/api/endpoint", headers=headers)
 - **401 Unauthorized**: API key is missing from the request
 - **403 Forbidden**: API key is invalid or has been revoked
 
-## Firestore Schema
+## PostgreSQL Schema
 
-API keys are stored in the `api_keys` collection:
+API keys are stored in the `api_keys` table:
 
-```
-Collection: api_keys
-Document ID: <sha256_hash_of_api_key>
-Fields:
-  - user_id: string         # User email or identifier
-  - created_at: timestamp   # When the key was created
-  - last_used_at: timestamp # Last time the key was used (auto-updated)
-  - active: boolean         # Whether the key is active (false = revoked)
-```
+- `key_hash`: SHA-256 hash of the API key (primary key)
+- `user_id`: User email or identifier
+- `created_at`, `last_used_at`: Timestamps
+- `active`: Whether the key is active (false = revoked)
+
+See [POSTGRESQL.md](POSTGRESQL.md) and [app/db/schema.sql](../app/db/schema.sql).
 
 ## Migration from Old System
 
-The old single `API_KEY` system has been completely replaced. You need to:
+The old single `API_KEY` system has been replaced. You need to:
 
-1. **Update your `.env` file**:
-   - Remove `API_KEY`
-   - Add `ADMIN_SECRET`
-
-2. **Generate API keys** for your users:
-   ```bash
-   python scripts/manage_api_keys.py create user1@example.com
-   python scripts/manage_api_keys.py create user2@example.com
-   ```
-
-3. **Update client code** to use `Authorization: Bearer` header instead of `X-API-Key`
-
-4. **Distribute API keys** to your users securely
-
-## Testing
-
-Run the test suite to verify the system is working:
-
-```bash
-python scripts/test_api_key_system.py
-```
-
-This will test:
-- API key generation
-- Validation
-- Last used timestamp updates
-- Revocation
-- Deletion
-- Invalid key rejection
+1. **Update your `.env` file**: Add `ADMIN_SECRET` and PostgreSQL vars.
+2. **Create API keys** via the Admin API (see above).
+3. **Update client code** to use `Authorization: Bearer` header.
+4. **Distribute API keys** to your users securely.
 
 ## Best Practices
 
 1. **Keep API keys secret**: Never commit them to version control
 2. **Use HTTPS**: Always use HTTPS in production to protect keys in transit
 3. **Rotate keys regularly**: Delete old keys and generate new ones periodically
-4. **Monitor usage**: Check `last_used_at` timestamps to identify unused keys
+4. **Monitor usage**: Check `last_used_at` via the list endpoint to identify unused keys
 5. **Revoke before delete**: Use revocation first to ensure no active usage before permanent deletion
 6. **Secure admin secret**: Protect your `ADMIN_SECRET` as it controls all key management
 
@@ -230,16 +157,13 @@ This will test:
 - Check for typos in the header name
 
 ### "Invalid or inactive API key"
-- Verify the key hasn't been revoked
-- Check that you're using the complete key including the `odace_` prefix
-- Ensure the key exists in Firestore
+- Verify the key hasn't been revoked (list keys via Admin API)
+- Ensure the key exists in the database (PostgreSQL)
 
-### Firestore connection issues
-- Verify GCP credentials are configured
-- Check that the service account has Firestore permissions
-- Ensure the Firestore API is enabled in your GCP project
+### Database connection issues
+- Verify `PG_DB_*` or `DATABASE_URL` is set correctly
+- Ensure the app can reach PostgreSQL (network, credentials). See [POSTGRESQL.md](POSTGRESQL.md).
 
 ## Support
 
 For issues or questions, please refer to the main README.md or contact your system administrator.
-

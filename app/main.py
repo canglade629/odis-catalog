@@ -82,10 +82,15 @@ async def health_check():
 async def startup_event():
     """Startup event handler."""
     settings = get_settings()
-    logger.info(f"Starting Odace Data Pipeline API")
-    logger.info(f"Environment: {settings.environment}")
-    logger.info(f"GCS Bucket: {settings.gcs_bucket}")
-    logger.info(f"Project: {settings.gcp_project_id}")
+    logger.info("Starting Odace Data Pipeline API")
+    logger.info("Environment: %s", settings.environment)
+    logger.info("S3 Bucket: %s", settings.scw_bucket_name)
+    try:
+        from app.db.session import init_engine
+        init_engine()
+        logger.info("Database (PostgreSQL) initialized")
+    except Exception as e:
+        logger.warning("Database init skipped or failed: %s", e)
     
     # Load pipelines from YAML configuration
     from app.core.config_loader import get_config_loader
@@ -96,19 +101,14 @@ async def startup_event():
         config_loader = get_config_loader()
         register_pipelines_from_yaml(config_loader)
         
-        # Log registered pipelines
+        # Log registered pipelines (bronze only; silver/gold run via DBT)
         registry = get_registry()
         bronze_pipelines = registry.list_pipelines(layer=PipelineLayer.BRONZE)
-        silver_pipelines = registry.list_pipelines(layer=PipelineLayer.SILVER)
         gold_pipelines = registry.list_pipelines(layer=PipelineLayer.GOLD)
         
         logger.info(f"Registered {len(bronze_pipelines)} bronze pipelines")
-        logger.info(f"Registered {len(silver_pipelines)} silver pipelines")
-        logger.info(f"Registered {len(gold_pipelines)} gold pipelines")
-        
-        # Log pipeline names for debugging
+        logger.info(f"Silver/Gold: run via DBT project (dbt/)")
         logger.info(f"Bronze pipelines: {[p.name for p in bronze_pipelines]}")
-        logger.info(f"Silver pipelines: {[p.name for p in silver_pipelines]}")
         
     except Exception as e:
         logger.error(f"Error loading pipelines from YAML: {e}", exc_info=True)

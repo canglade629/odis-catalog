@@ -59,7 +59,7 @@ Added PyYAML==6.0.1 for YAML configuration parsing
 - Write mode: Overwrite (full refresh) for data consistency
 - Automatic handling of quoted column names
 - Preserves __id field from API response
-- **Raw data persistence**: All API responses are saved to GCS raw layer with timestamp
+- **Raw data persistence**: All API responses are saved to S3 raw layer with timestamp
 
 ### Target Tables
 - Naming convention: `open_data_{resource_name}`
@@ -72,7 +72,7 @@ Added PyYAML==6.0.1 for YAML configuration parsing
 
 ### Raw Data Layer
 All API responses are automatically persisted to the raw layer:
-- **Location:** `gs://jaccueille/raw/api/{table_name}/`
+- **Location:** `s3://{bucket}/raw/api/{table_name}/`
 - **Format:** JSON files with timestamped names
 - **Naming:** `{table_name}_{YYYYMMDD_HHMMSS}.json`
 - **Purpose:** Historical record of all API fetches for audit and reprocessing
@@ -218,8 +218,8 @@ The `data_type` field helps document the original file format, though all data i
 
 ## Next Steps
 
-1. Deploy to Cloud Run (Terraform already configured)
-2. Test the pipeline with actual GCS bucket and Delta Lake
+1. Deploy via Docker/Coolify (see README)
+2. Test the pipeline with actual S3 bucket and Delta Lake
 3. Add API routes to trigger Open Data pipeline jobs
 4. Monitor pipeline execution and performance
 5. Add more data.gouv.fr resources as needed

@@ -59,11 +59,11 @@ class BronzeLogementPipeline(BaseBronzePipeline):
         return "logement"
     
     def read_source_file(self, file_path: str) -> pd.DataFrame:
-        """Read CSV file from GCS with encoding fallback."""
+        """Read CSV file from S3 with encoding fallback."""
         logger.info(f"Reading CSV file: {file_path}")
         
         # Download file to memory
-        file_content = self.gcs.download_file(file_path)
+        file_content = self.s3.download_file(file_path)
         
         # Try UTF-8 first, then fallback to Latin-1 (ISO-8859-1)
         try:

@@ -1,10 +1,10 @@
-"""Migration validation utilities for comparing V1 and V2 silver tables."""
+"""Validation utilities for silver (and bronze) tables."""
 import logging
 import pandas as pd
 from typing import Dict, List, Optional, Any, Tuple
-from deltalake import DeltaTable
+
 from app.core.config import get_settings
-import hashlib
+from app.utils.delta_ops import DeltaOperations
 
 logger = logging.getLogger(__name__)
 
@@ -24,45 +24,47 @@ class ValidationResult:
 
 
 class MigrationValidator:
-    """Validator for comparing old and new silver tables during migration."""
+    """Validator for silver tables (and bronze-to-silver comparisons)."""
     
     def __init__(self):
         self.settings = get_settings()
         self.results: List[ValidationResult] = []
     
     def _load_table(self, layer: str, table_name: str) -> pd.DataFrame:
-        """Load a Delta table from GCS.
+        """Load a Delta or Parquet table from S3.
         
         Args:
-            layer: Layer name (silver or silver_v2)
+            layer: Layer name (bronze or silver)
             table_name: Table name
             
         Returns:
             DataFrame with table data
         """
-        if layer == "silver":
+        if layer == "bronze":
+            path = self.settings.get_bronze_path(table_name)
+        elif layer == "silver":
             path = self.settings.get_silver_path(table_name)
-        elif layer == "silver_v2":
-            path = self.settings.get_silver_v2_path(table_name)
         else:
-            raise ValueError(f"Invalid layer: {layer}")
+            raise ValueError(f"Invalid layer: {layer}. Use 'bronze' or 'silver'.")
         
         logger.info(f"Loading table from {path}")
-        dt = DeltaTable(path)
-        df = dt.to_pandas()
+        if path.rstrip("/").endswith(".parquet"):
+            df = DeltaOperations.read_parquet(path)
+        else:
+            df = DeltaOperations.read_delta(path)
         logger.info(f"Loaded {len(df)} rows from {layer}.{table_name}")
         return df
     
-    def compare_row_counts(self, old_table: str, new_table: str, 
-                          old_layer: str = "silver", 
-                          new_layer: str = "silver_v2") -> ValidationResult:
-        """Compare row counts between old and new tables.
+    def compare_row_counts(self, old_table: str, new_table: str,
+                          old_layer: str = "bronze",
+                          new_layer: str = "silver") -> ValidationResult:
+        """Compare row counts between two tables (e.g. bronze vs silver).
         
         Args:
             old_table: Name of old table
             new_table: Name of new table
-            old_layer: Layer of old table (default: silver)
-            new_layer: Layer of new table (default: silver_v2)
+            old_layer: Layer of old table (default: bronze)
+            new_layer: Layer of new table (default: silver)
             
         Returns:
             ValidationResult
@@ -98,8 +100,8 @@ class MigrationValidator:
     
     def compare_unique_values(self, old_table: str, old_column: str,
                              new_table: str, new_column: str,
-                             old_layer: str = "silver",
-                             new_layer: str = "silver_v2") -> ValidationResult:
+                             old_layer: str = "bronze",
+                             new_layer: str = "silver") -> ValidationResult:
         """Compare unique values between old and new columns.
         
         Args:
@@ -107,8 +109,8 @@ class MigrationValidator:
             old_column: Column name in old table
             new_table: Name of new table
             new_column: Column name in new table
-            old_layer: Layer of old table
-            new_layer: Layer of new table
+            old_layer: Layer of old table (default: bronze)
+            new_layer: Layer of new table (default: silver)
             
         Returns:
             ValidationResult
@@ -157,13 +159,13 @@ class MigrationValidator:
             return result
     
     def validate_no_nulls(self, table: str, columns: List[str],
-                         layer: str = "silver_v2") -> ValidationResult:
+                         layer: str = "silver") -> ValidationResult:
         """Validate that specified columns have no NULL values.
         
         Args:
             table: Table name
             columns: List of column names to check
-            layer: Layer name (default: silver_v2)
+            layer: Layer name (default: silver)
             
         Returns:
             ValidationResult
@@ -207,13 +209,13 @@ class MigrationValidator:
             return result
     
     def validate_unique_key(self, table: str, key_column: str,
-                           layer: str = "silver_v2") -> ValidationResult:
+                           layer: str = "silver") -> ValidationResult:
         """Validate that a key column has all unique values.
         
         Args:
             table: Table name
             key_column: Column name to check for uniqueness
-            layer: Layer name (default: silver_v2)
+            layer: Layer name (default: silver)
             
         Returns:
             ValidationResult
@@ -268,8 +270,8 @@ class MigrationValidator:
     
     def validate_foreign_keys(self, fact_table: str, fk_column: str,
                              dim_table: str, pk_column: str,
-                             fact_layer: str = "silver_v2",
-                             dim_layer: str = "silver_v2") -> ValidationResult:
+                             fact_layer: str = "silver",
+                             dim_layer: str = "silver") -> ValidationResult:
         """Validate foreign key relationships.
         
         Args:
@@ -325,26 +327,28 @@ class MigrationValidator:
             self.results.append(result)
             return result
     
-    def validate_metadata_columns(self, table: str, layer: str = "silver_v2") -> ValidationResult:
-        """Validate that all 4 required metadata columns exist and are populated.
+    def validate_metadata_columns(self, table: str, layer: str = "silver") -> ValidationResult:
+        """Validate that required metadata columns exist (job_metadata JSON or legacy columns).
         
         Args:
             table: Table name
-            layer: Layer name (default: silver_v2)
+            layer: Layer name (default: silver)
             
         Returns:
             ValidationResult
         """
-        required_columns = [
-            'job_insert_id',
-            'job_insert_date_utc',
-            'job_modify_id',
-            'job_modify_date_utc'
-        ]
-        
         try:
             df = self._load_table(layer, table)
-            
+            # Silver tables use job_metadata JSON; accept either job_metadata or legacy 4 columns
+            if 'job_metadata' in df.columns:
+                required_columns = ['job_metadata']
+            else:
+                required_columns = [
+                    'job_insert_id',
+                    'job_insert_date_utc',
+                    'job_modify_id',
+                    'job_modify_date_utc'
+                ]
             missing_columns = [col for col in required_columns if col not in df.columns]
             
             if missing_columns:
@@ -362,9 +366,9 @@ class MigrationValidator:
             has_nulls = any(count > 0 for count in null_counts.values())
             
             passed = not has_nulls
-            
+
             if passed:
-                message = "All 4 metadata columns present and populated"
+                message = f"All {len(required_columns)} metadata column(s) present and populated"
             else:
                 message = f"Found NULLs in metadata columns: {null_counts}"
             

@@ -76,7 +76,7 @@ The admin secret (`ADMIN_SECRET` environment variable) provides full access to:
 ### Regular User - Query Certified Table
 ```bash
 # Works if table is certified
-curl -X POST https://odace-pipeline-p3fb4xzltq-ew.a.run.app/api/data/query \
+curl -X POST https://your-deployment-url/api/data/query \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"sql": "SELECT * FROM silver_dim_commune LIMIT 10"}'
@@ -85,20 +85,20 @@ curl -X POST https://odace-pipeline-p3fb4xzltq-ew.a.run.app/api/data/query \
 ### Regular User - Try to Run Pipeline
 ```bash
 # Returns: {"detail": "Invalid admin secret"}
-curl -X POST https://odace-pipeline-p3fb4xzltq-ew.a.run.app/api/pipeline/run \
+curl -X POST https://your-deployment-url/api/pipeline/run \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
 ### Admin - Run Pipeline
 ```bash
 # Works with admin secret
-curl -X POST https://odace-pipeline-p3fb4xzltq-ew.a.run.app/api/pipeline/run \
+curl -X POST https://your-deployment-url/api/pipeline/run \
   -H "Authorization: Bearer YOUR_ADMIN_SECRET"
 ```
 
 ### Admin - Certify Table
 ```bash
-curl -X POST https://odace-pipeline-p3fb4xzltq-ew.a.run.app/admin/tables/certify \
+curl -X POST https://your-deployment-url/admin/tables/certify \
   -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"table_name": "dim_commune", "layer": "silver"}'
@@ -136,9 +136,9 @@ curl -X POST https://odace-pipeline-p3fb4xzltq-ew.a.run.app/admin/tables/certify
 
 ## Security Model
 
-1. **API Keys** are stored in Firestore with hashed values
-2. **Admin Secret** is stored in Google Secret Manager
-3. **Table Certifications** are stored in Firestore
+1. **API Keys** are stored in PostgreSQL with hashed values
+2. **Admin Secret** is set via environment (e.g. Coolify env vars)
+3. **Table Certifications** are stored in PostgreSQL
 4. All authenticated endpoints use rate limiting (60 requests/minute)
 5. Regular users are isolated from:
    - Pipeline execution (prevent resource exhaustion)
@@ -150,7 +150,7 @@ curl -X POST https://odace-pipeline-p3fb4xzltq-ew.a.run.app/admin/tables/certify
 Admins can create API keys for users:
 
 ```bash
-curl -X POST https://odace-pipeline-p3fb4xzltq-ew.a.run.app/admin/api-keys \
+curl -X POST https://your-deployment-url/admin/api-keys \
   -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"user_id": "user@example.com"}'

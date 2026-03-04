@@ -1,25 +1,51 @@
 """Data catalog API routes."""
 import logging
 import time
+from decimal import Decimal
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
-from google.cloud import firestore
+from sqlalchemy.ext.asyncio import AsyncSession
+import numpy as np
 
-from app.core.auth import verify_api_key, verify_admin_secret, get_firestore_client, verify_api_key_or_admin
+from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin
+from app.db.session import get_db
+from app.db.repositories.catalogue import catalogue_repo
 from app.core.config import get_settings
 from app.utils.delta_ops import DeltaOperations
 from app.utils.sql_executor import SQLExecutor
 from app.core.rate_limiter import limiter
 from app.core.pipeline_registry import get_registry
+from app.core.config_loader import get_config_loader
 from app.core.models import PipelineLayer
 from app.core.certification_manager import is_table_certified, get_certification_status
 
 logger = logging.getLogger(__name__)
 
 security = HTTPBearer(auto_error=False)
+
+
+def _make_json_serializable(obj: Any) -> Any:
+    """Recursively convert bytes, numpy types, etc. to JSON-serializable values."""
+    if isinstance(obj, dict):
+        return {k: _make_json_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_make_json_serializable(v) for v in obj]
+    if isinstance(obj, bytes):
+        return "<binary>"
+    if isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    if isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj) if np.isfinite(obj) else None
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return _make_json_serializable(obj.tolist())
+    if isinstance(obj, Decimal):
+        return float(obj) if obj.is_finite() else None
+    return obj
 
 
 async def check_admin_or_raise(credentials: Optional[HTTPAuthorizationCredentials]) -> bool:
@@ -41,8 +67,8 @@ async def check_admin_or_raise(credentials: Optional[HTTPAuthorizationCredential
 async def verify_table_access(
     layer: str,
     table_name: str,
-    db: firestore.AsyncClient,
-    credentials: Optional[HTTPAuthorizationCredentials] = None
+    session: AsyncSession,
+    credentials: Optional[HTTPAuthorizationCredentials] = None,
 ) -> None:
     """
     Verify that the user has access to the specified table.
@@ -68,7 +94,7 @@ async def verify_table_access(
         )
     
     # Check if the silver table is certified
-    certified = await is_table_certified(layer, table_name, db)
+    certified = await is_table_certified(layer, table_name, session)
     
     if not certified:
         raise HTTPException(
@@ -76,32 +102,17 @@ async def verify_table_access(
             detail=f"Table {table_name} is not certified for public use. Please contact an administrator."
         )
 
-async def load_catalogue_from_firestore(db: firestore.AsyncClient) -> Dict[str, Any]:
-    """
-    Load the data catalogue from Firestore.
-    
-    This is much faster than reading from YAML file and making GCS calls.
-    Falls back to empty catalogue if not found.
-    
-    Args:
-        db: Firestore async client
-    
-    Returns:
-        Catalogue data dict with 'tables' key
-    """
+async def load_catalogue_from_db(session: AsyncSession) -> Dict[str, Any]:
+    """Load the data catalogue from PostgreSQL. Falls back to empty if not found."""
     try:
-        doc_ref = db.collection('data_catalogue').document('silver_tables')
-        doc = await doc_ref.get()
-        
-        if doc.exists:
-            data = doc.to_dict()
-            logger.info(f"Loaded catalogue from Firestore with {len(data.get('tables', {}))} tables")
+        data = await catalogue_repo.get(session)
+        if data:
+            logger.info("Loaded catalogue from DB with %d tables", len(data.get("tables", {})))
             return data
-        else:
-            logger.warning("Catalogue document not found in Firestore")
-            return {"tables": {}}
+        logger.warning("Catalogue document not found in DB")
+        return {"tables": {}}
     except Exception as e:
-        logger.error(f"Error loading catalogue from Firestore: {e}")
+        logger.error("Error loading catalogue from DB: %s", e)
         return {"tables": {}}
 
 router = APIRouter(prefix="/api/data", tags=["data"])
@@ -219,7 +230,7 @@ async def get_catalog(request: Request, user_id: str = Depends(verify_api_key_or
     """
     Get the complete data catalog with all schemas and tables.
     
-    Scans GCS for Delta tables in bronze, silver, and gold layers.
+    Scans S3 for Delta/Parquet tables in bronze, silver, and gold layers.
     """
     logger.info("Fetching data catalog")
     settings = get_settings()
@@ -227,9 +238,13 @@ async def get_catalog(request: Request, user_id: str = Depends(verify_api_key_or
     try:
         schemas = {}
         
-        # Scan each layer
+        # Scan each layer (S3 paths)
         for layer in ["bronze", "silver", "gold"]:
-            layer_path = f"{settings.delta_path}/{layer}"
+            layer_path = (
+                settings.bronze_path
+                if layer == "bronze"
+                else (settings.silver_path if layer == "silver" else settings.gold_path)
+            )
             try:
                 tables = DeltaOperations.list_delta_tables(layer_path)
                 schemas[layer] = [
@@ -256,7 +271,7 @@ async def get_catalog(request: Request, user_id: str = Depends(verify_api_key_or
 async def get_silver_catalog(
     request: Request,
     user_id: str = Depends(verify_api_key_or_admin),
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db)
 ):
     """
     Get catalog of silver tables with French descriptions.
@@ -264,43 +279,43 @@ async def get_silver_catalog(
     Returns all silver layer tables with their French descriptions, dependencies,
     and basic metadata. Uses direct table names (dim_*, fact_*).
     
-    Reads entirely from Firestore cache - NO GCS calls for maximum speed.
+    Reads entirely from PostgreSQL catalogue cache for maximum speed.
     """
     logger.info("Fetching silver catalog with French descriptions")
-    registry = get_registry()
-    
+    config_loader = get_config_loader()
+
     try:
         # Import query tracker
         from app.utils.query_tracker import get_table_query_count
-        
-        # Load catalogue from Firestore (fast!)
-        catalogue = await load_catalogue_from_firestore(db)
+
+        # Load catalogue from PostgreSQL (fast!)
+        catalogue = await load_catalogue_from_db(session)
         catalogue_tables = catalogue.get('tables', {})
-        
-        # Get all silver pipelines from registry
-        silver_pipelines = registry.list_pipelines(layer=PipelineLayer.SILVER)
-        
+
+        # Silver table list from config (DBT-managed; not in app registry)
+        silver_configs = config_loader.load_layer_config("silver")
+
         tables = []
-        for pipeline in silver_pipelines:
+        for pipeline in silver_configs:
             # Pipeline name is now the same as the table name (dim_*, fact_*)
             table_name = pipeline.name
-            
-            # Get all metadata from cached catalogue (no GCS calls!)
+
+            # Get all metadata from cached catalogue (no S3 calls)
             catalogue_info = catalogue_tables.get(table_name, {})
             row_count = catalogue_info.get("row_count")
             version = catalogue_info.get("schema", {}).get("version", 0)
             
-            # Get certification status from Firestore (fast)
-            cert_status = await get_certification_status("silver", table_name, db)
+            # Get certification status from PostgreSQL (fast)
+            cert_status = await get_certification_status("silver", table_name, session)
             
-            # Get query count from Firestore
-            query_count = await get_table_query_count(db, f"silver_{table_name}")
+            # Get query count from PostgreSQL
+            query_count = await get_table_query_count(session, f"silver_{table_name}")
             
             tables.append(SilverTableInfo(
                 name=table_name,
                 actual_table_name=table_name,
                 description_fr=pipeline.description_fr or "Description non disponible",
-                dependencies=pipeline.dependencies,
+                dependencies=pipeline.dependencies or [],
                 version=version,
                 row_count=row_count,
                 certified=cert_status is not None and cert_status.get("certified", False),
@@ -322,31 +337,30 @@ async def get_silver_table_detail(
     request: Request,
     table_name: str,
     user_id: str = Depends(verify_api_key_or_admin),
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db)
 ):
     """
     Get detailed information about a specific silver table.
     
     Returns table metadata, schema, French description, dependencies,
-    and first 10 rows of data. All data is cached in Firestore for fast access.
+    and first 10 rows of data. All data is cached in PostgreSQL for fast access.
     
     Args:
         table_name: Name of the silver table
     """
     logger.info(f"Fetching details for silver.{table_name}")
-    registry = get_registry()
-    
+    config_loader = get_config_loader()
+
     try:
-        # Get pipeline info from registry
-        silver_pipelines = registry.list_pipelines(layer=PipelineLayer.SILVER)
-        pipeline_info = next((p for p in silver_pipelines if p.name == table_name), None)
-        
+        silver_configs = config_loader.load_layer_config("silver")
+        pipeline_info = next((p for p in silver_configs if p.name == table_name), None)
+
         if not pipeline_info:
-            raise HTTPException(status_code=404, detail=f"Table {table_name} not found in registry")
+            raise HTTPException(status_code=404, detail=f"Table {table_name} not found")
         
-        # Load enriched catalogue from Firestore (includes schema + preview)
-        catalogue = await load_catalogue_from_firestore(db)
-        logger.info(f"Loaded enriched catalogue from Firestore with {len(catalogue.get('tables', {}))} tables")
+        # Load enriched catalogue from PostgreSQL (includes schema + preview)
+        catalogue = await load_catalogue_from_db(session)
+        logger.info(f"Loaded enriched catalogue from PostgreSQL with {len(catalogue.get('tables', {}))} tables")
         
         table_catalogue = catalogue.get("tables", {}).get(table_name, {})
         
@@ -382,7 +396,7 @@ async def get_silver_table_detail(
         preview_data = table_catalogue.get('preview', [])
         
         # Get certification status
-        cert_status = await get_certification_status("silver", table_name, db)
+        cert_status = await get_certification_status("silver", table_name, session)
         
         return SilverTableDetail(
             name=table_name,
@@ -425,7 +439,12 @@ async def get_table_metadata(
         raise HTTPException(status_code=400, detail="Layer must be bronze, silver, or gold")
     
     # Construct table path
-    table_path = f"{settings.delta_path}/{layer}/{table}"
+    if layer == "silver":
+        table_path = settings.get_silver_path(table)
+    elif layer == "bronze":
+        table_path = settings.get_bronze_path(table)
+    else:
+        table_path = settings.get_gold_path(table)
     
     try:
         schema_info = DeltaOperations.get_table_schema(table_path)
@@ -458,7 +477,7 @@ async def preview_table(
     preview_req: PreviewRequest,
     user_id: str = Depends(verify_api_key_or_admin),
     credentials: HTTPAuthorizationCredentials = Security(security),
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db)
 ):
     """
     Get a preview of table data with optional filtering and sorting.
@@ -476,10 +495,15 @@ async def preview_table(
         raise HTTPException(status_code=400, detail="Layer must be bronze, silver, or gold")
     
     # Check access permissions
-    await verify_table_access(layer, table, db, credentials)
+    await verify_table_access(layer, table, session, credentials)
     
     # Construct table path
-    table_path = f"{settings.delta_path}/{layer}/{table}"
+    if layer == "silver":
+        table_path = settings.get_silver_path(table)
+    elif layer == "bronze":
+        table_path = settings.get_bronze_path(table)
+    else:
+        table_path = settings.get_gold_path(table)
     
     try:
         # Convert Pydantic models to dicts
@@ -515,7 +539,7 @@ async def execute_sql_query(
     query_req: QueryRequest,
     user_id: str = Depends(verify_api_key_or_admin),
     credentials: HTTPAuthorizationCredentials = Security(security),
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db)
 ):
     """
     Execute a SQL query against Delta tables.
@@ -538,12 +562,16 @@ async def execute_sql_query(
     try:
         start_time = time.time()
         
-        # Register all Delta tables from all layers
+        # Register all Delta tables from all layers (S3 paths)
         registered_tables = []
         registration_errors = []
         
         for layer in ["bronze", "silver", "gold"]:
-            layer_path = f"{settings.delta_path}/{layer}"
+            layer_path = (
+                settings.bronze_path
+                if layer == "bronze"
+                else (settings.silver_path if layer == "silver" else settings.gold_path)
+            )
             try:
                 tables = DeltaOperations.list_delta_tables(layer_path)
                 logger.info(f"Found {len(tables)} tables in {layer}")
@@ -560,7 +588,7 @@ async def execute_sql_query(
                             continue
                         
                         # Check if silver table is certified
-                        certified = await is_table_certified(layer, table['name'], db)
+                        certified = await is_table_certified(layer, table['name'], session)
                         if not certified:
                             logger.info(f"Skipping {table_name} - not certified")
                             continue
@@ -603,7 +631,7 @@ async def execute_sql_query(
         
         # Track usage for each queried table
         for table_name in queried_tables:
-            await increment_query_count(db, table_name, user_id)
+            await increment_query_count(session, table_name, user_id)
         
         # Apply limit
         limited_df = result_df.head(query_req.limit)
@@ -655,21 +683,20 @@ async def execute_sql_query(
 async def refresh_catalogue(
     request: Request,
     user_id: str = Depends(verify_api_key_or_admin),
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db)
 ):
     """
-    Refresh the data catalogue in Firestore from the YAML file.
+    Refresh the data catalogue in PostgreSQL from the YAML file.
     
     This endpoint reads config/data_catalogue.yaml, enriches it with
-    schema and preview data from Delta tables, and syncs to Firestore
-    for fast access.
+    schema and preview data from S3 (Delta/Parquet), and syncs to PostgreSQL.
     
     Available to all authenticated users (API key or admin secret).
     
     Args:
         request: FastAPI request object for rate limiting
         user_id: Authenticated user ID or "admin"
-        db: Firestore async client
+        session: AsyncSession (DB)
         
     Returns:
         Sync status with number of tables and timestamp
@@ -713,7 +740,7 @@ async def refresh_catalogue(
             
             try:
                 # Get schema from Delta table
-                table_path = f"{settings.delta_path}/silver/{table_name}"
+                table_path = settings.get_silver_path(table_name)
                 schema_info = DeltaOperations.get_table_schema(table_path)
                 
                 enriched_table['schema'] = {
@@ -739,29 +766,19 @@ async def refresh_catalogue(
             
             enriched_tables[table_name] = enriched_table
         
-        # Convert async Firestore client to sync for the sync operation
-        sync_db = firestore.Client()
-        
-        # Prepare document with metadata
         sync_time = datetime.now(timezone.utc)
-        
-        firestore_doc = {
-            'tables': enriched_tables,
-            'version': catalogue_data.get('version', 'unknown'),
-            'generated_at': catalogue_data.get('generated_at', ''),
-            'last_synced': sync_time,
-            'source_file': 'data_catalogue.yaml',
-            'enriched': True
+        document = {
+            "tables": enriched_tables,
+            "version": catalogue_data.get("version", "unknown"),
+            "generated_at": catalogue_data.get("generated_at", ""),
+            "last_synced": sync_time.isoformat(),
+            "source_file": "data_catalogue.yaml",
+            "enriched": True,
         }
-        
-        # Write to Firestore
-        collection_ref = sync_db.collection('data_catalogue')
-        doc_ref = collection_ref.document('silver_tables')
-        doc_ref.set(firestore_doc)
-        
+        document = _make_json_serializable(document)
+        await catalogue_repo.set(session, document)
         num_tables = len(enriched_tables)
-        
-        logger.info(f"✅ Synced {num_tables} enriched tables to Firestore at {sync_time.isoformat()}")
+        logger.info("Synced %d enriched tables to DB at %s", num_tables, sync_time.isoformat())
         
         result = {
             'status': 'success',

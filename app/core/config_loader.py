@@ -99,14 +99,13 @@ class ConfigLoader:
     
     def load_all_configs(self) -> Dict[str, List[PipelineConfig]]:
         """
-        Load all pipeline configurations for all layers.
-        
-        Returns:
-            Dictionary mapping layer names to lists of PipelineConfig
+        Load pipeline configurations for app-managed layers only.
+        Bronze and gold are loaded; silver is run by DBT (see dbt/ project).
         """
         configs = {}
-        for layer in ["bronze", "silver", "gold"]:
+        for layer in ["bronze", "gold"]:
             configs[layer] = self.load_layer_config(layer)
+        configs["silver"] = []  # Silver pipelines are in DBT, not registered in app
         return configs
     
     def get_pipeline_class(self, pipeline_class_path: str):

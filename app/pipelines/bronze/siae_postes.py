@@ -26,11 +26,11 @@ class BronzeSIAEPostesPipeline(BaseBronzePipeline):
         return "siae_postes"
     
     def read_source_file(self, file_path: str) -> pd.DataFrame:
-        """Read cached JSON file from GCS."""
+        """Read cached JSON file from S3."""
         logger.info(f"Reading cached SIAE postes from: {file_path}")
         
         # Download file content
-        file_content = self.gcs.download_file(file_path)
+        file_content = self.s3.download_file(file_path)
         
         # Parse JSON
         data = json.loads(file_content.decode('utf-8'))

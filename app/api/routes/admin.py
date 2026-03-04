@@ -1,13 +1,15 @@
-"""Admin API routes for managing API keys."""
+"""Admin API routes for managing API keys (PostgreSQL-backed)."""
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from google.cloud import firestore
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import logging
 from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import verify_admin_secret, verify_api_key_or_admin, get_firestore_client
+from app.core.auth import verify_admin_secret_or_admin_key, verify_api_key_or_admin
+from app.db.session import get_db
+from app.db.repositories.catalogue import catalogue_repo
 from app.core.rate_limiter import limiter
 from app.core.api_key_manager import (
     create_api_key,
@@ -28,7 +30,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/admin",
     tags=["admin"],
-    dependencies=[Depends(verify_admin_secret)]
+    dependencies=[Depends(verify_admin_secret_or_admin_key)]
 )
 
 
@@ -98,21 +100,10 @@ class CatalogueRefreshResponse(BaseModel):
 async def create_new_api_key(
     request: Request,
     api_key_request: CreateAPIKeyRequest,
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db),
 ):
-    """
-    Create a new API key for a user.
-    
-    Requires admin authentication via ADMIN_SECRET.
-    
-    Args:
-        request: Contains user_id for the new API key
-        db: Firestore async client
-        
-    Returns:
-        The newly created API key (shown only once)
-    """
-    result = await create_api_key(api_key_request.user_id, db)
+    """Create a new API key for a user. Requires admin authentication."""
+    result = await create_api_key(api_key_request.user_id, session)
     
     return CreateAPIKeyResponse(
         api_key=result["api_key"],
@@ -126,21 +117,10 @@ async def create_new_api_key(
 async def revoke_existing_api_key(
     request: Request,
     revoke_request: RevokeAPIKeyRequest,
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db),
 ):
-    """
-    Revoke an API key (soft delete - sets active=False).
-    
-    Requires admin authentication via ADMIN_SECRET.
-    
-    Args:
-        request: Contains the API key to revoke
-        db: Firestore async client
-        
-    Returns:
-        Success message
-    """
-    success = await revoke_api_key(revoke_request.api_key, db)
+    """Revoke an API key (soft delete - sets active=False). Requires admin."""
+    success = await revoke_api_key(revoke_request.api_key, session)
     
     if not success:
         raise HTTPException(
@@ -156,21 +136,10 @@ async def revoke_existing_api_key(
 async def delete_existing_api_key(
     request: Request,
     delete_request: DeleteAPIKeyRequest,
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db),
 ):
-    """
-    Permanently delete an API key from Firestore.
-    
-    Requires admin authentication via ADMIN_SECRET.
-    
-    Args:
-        request: Contains the API key to delete
-        db: Firestore async client
-        
-    Returns:
-        Success message
-    """
-    success = await delete_api_key(delete_request.api_key, db)
+    """Permanently delete an API key. Requires admin authentication."""
+    success = await delete_api_key(delete_request.api_key, session)
     
     if not success:
         raise HTTPException(
@@ -185,7 +154,7 @@ async def delete_existing_api_key(
 @limiter.limit("100/hour")
 async def list_all_api_keys(
     request: Request,
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db),
 ):
     """
     List all API keys (without plaintext keys).
@@ -193,12 +162,12 @@ async def list_all_api_keys(
     Requires admin authentication via ADMIN_SECRET.
     
     Args:
-        db: Firestore async client
+        db: Database session (PostgreSQL)
         
     Returns:
         List of API key metadata
     """
-    keys = await list_api_keys(db)
+    keys = await list_api_keys(session)
     return keys
 
 
@@ -207,8 +176,8 @@ async def list_all_api_keys(
 async def certify_table_endpoint(
     request: Request,
     certify_request: CertifyTableRequest,
-    db: firestore.AsyncClient = Depends(get_firestore_client),
-    admin_verified: bool = Depends(verify_admin_secret)
+    session: AsyncSession = Depends(get_db),
+    admin_verified: bool = Depends(verify_admin_secret_or_admin_key)
 ):
     """
     Certify a table for public use.
@@ -217,7 +186,7 @@ async def certify_table_endpoint(
     
     Args:
         request: Contains table_name and layer
-        db: Firestore async client
+        db: Database session (PostgreSQL)
         admin_verified: Admin authentication status
         
     Returns:
@@ -225,10 +194,10 @@ async def certify_table_endpoint(
     """
     try:
         result = await certify_table(
-            layer=certify_request.layer,
-            table_name=certify_request.table_name,
-            admin_id="admin",  # In the future, could track specific admin user
-            db=db
+            certify_request.layer,
+            certify_request.table_name,
+            "admin",
+            session,
         )
         
         return CertificationResponse(**result)
@@ -244,8 +213,8 @@ async def certify_table_endpoint(
 async def uncertify_table_endpoint(
     request: Request,
     uncertify_request: UncertifyTableRequest,
-    db: firestore.AsyncClient = Depends(get_firestore_client),
-    admin_verified: bool = Depends(verify_admin_secret)
+    session: AsyncSession = Depends(get_db),
+    admin_verified: bool = Depends(verify_admin_secret_or_admin_key)
 ):
     """
     Remove certification from a table.
@@ -254,7 +223,7 @@ async def uncertify_table_endpoint(
     
     Args:
         request: Contains table_name and layer
-        db: Firestore async client
+        db: Database session (PostgreSQL)
         admin_verified: Admin authentication status
         
     Returns:
@@ -262,9 +231,9 @@ async def uncertify_table_endpoint(
     """
     try:
         success = await uncertify_table(
-            layer=uncertify_request.layer,
-            table_name=uncertify_request.table_name,
-            db=db
+            uncertify_request.layer,
+            uncertify_request.table_name,
+            session,
         )
         
         if success:
@@ -289,8 +258,8 @@ async def uncertify_table_endpoint(
 @limiter.limit("100/hour")
 async def list_table_certifications(
     request: Request,
-    db: firestore.AsyncClient = Depends(get_firestore_client),
-    admin_verified: bool = Depends(verify_admin_secret)
+    session: AsyncSession = Depends(get_db),
+    admin_verified: bool = Depends(verify_admin_secret_or_admin_key)
 ):
     """
     List all table certifications.
@@ -298,14 +267,14 @@ async def list_table_certifications(
     Requires admin authentication via ADMIN_SECRET.
     
     Args:
-        db: Firestore async client
+        db: Database session (PostgreSQL)
         admin_verified: Admin authentication status
         
     Returns:
         List of all certification statuses
     """
     try:
-        certifications = await get_all_certifications(db)
+        certifications = await get_all_certifications(session)
         return {"certifications": certifications}
     except Exception as e:
         raise HTTPException(
@@ -319,24 +288,9 @@ async def list_table_certifications(
 async def refresh_catalogue(
     request: Request,
     user_id: str = Depends(verify_api_key_or_admin),
-    db: firestore.AsyncClient = Depends(get_firestore_client)
+    session: AsyncSession = Depends(get_db),
 ):
-    """
-    Refresh the data catalogue in Firestore from the YAML file.
-    
-    This endpoint reads config/data_catalogue.yaml, enriches it with
-    schema and preview data from Delta tables, and syncs to Firestore
-    for fast access.
-    
-    Available to all authenticated users (API key or admin secret).
-    
-    Args:
-        db: Firestore async client
-        admin_verified: Admin authentication status
-        
-    Returns:
-        Sync status with number of tables and timestamp
-    """
+    """Refresh the data catalogue in PostgreSQL from YAML (enriched with S3 schema/preview)."""
     try:
         import yaml
         from datetime import datetime, timezone
@@ -378,7 +332,7 @@ async def refresh_catalogue(
             
             try:
                 # Get schema from Delta table
-                table_path = f"{settings.delta_path}/silver/{table_name}"
+                table_path = settings.get_silver_path(table_name)
                 schema_info = DeltaOperations.get_table_schema(table_path)
                 
                 enriched_table['schema'] = {
@@ -404,29 +358,18 @@ async def refresh_catalogue(
             
             enriched_tables[table_name] = enriched_table
         
-        # Convert async Firestore client to sync for the sync operation
-        sync_db = firestore.Client()
-        
-        # Prepare document with metadata
         sync_time = datetime.now(timezone.utc)
-        
-        firestore_doc = {
-            'tables': enriched_tables,
-            'version': catalogue_data.get('version', 'unknown'),
-            'generated_at': catalogue_data.get('generated_at', ''),
-            'last_synced': sync_time,
-            'source_file': 'data_catalogue.yaml',
-            'enriched': True
+        document = {
+            "tables": enriched_tables,
+            "version": catalogue_data.get("version", "unknown"),
+            "generated_at": catalogue_data.get("generated_at", ""),
+            "last_synced": sync_time.isoformat(),
+            "source_file": "data_catalogue.yaml",
+            "enriched": True,
         }
-        
-        # Write to Firestore
-        collection_ref = sync_db.collection('data_catalogue')
-        doc_ref = collection_ref.document('silver_tables')
-        doc_ref.set(firestore_doc)
-        
+        await catalogue_repo.set(session, document)
         num_tables = len(enriched_tables)
-        
-        logger.info(f"✅ Synced {num_tables} enriched tables to Firestore at {sync_time.isoformat()}")
+        logger.info("Synced %d enriched tables to DB at %s", num_tables, sync_time.isoformat())
         
         result = {
             'status': 'success',

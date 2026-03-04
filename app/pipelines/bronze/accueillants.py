@@ -22,11 +22,11 @@ class BronzeAccueillantsPipeline(BaseBronzePipeline):
         return "accueillants"
     
     def read_source_file(self, file_path: str) -> pd.DataFrame:
-        """Read Excel file from GCS."""
+        """Read Excel file from S3."""
         logger.info(f"Reading Excel file: {file_path}")
         
         # Download file to memory
-        file_stream = self.gcs.download_to_stream(file_path)
+        file_stream = self.s3.download_to_stream(file_path)
         
         # Read Excel file (header is first row)
         df = pd.read_excel(file_stream, header=0)

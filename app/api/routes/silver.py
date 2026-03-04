@@ -1,10 +1,9 @@
-"""Silver layer API endpoints."""
+"""Silver layer API endpoints. Silver is run via DBT (dbt/ project)."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.core.auth import verify_api_key, verify_admin_secret
-from app.core.models import PipelineRunResponse, PipelineLayer, PipelineStatus
-from app.core.pipeline_executor import get_pipeline_executor
-from app.core.job_manager import get_job_manager, JobStatus
+from app.core.auth import verify_admin_secret
+from app.core.job_manager import JobManager, get_job_manager, JobStatus
 from app.core.rate_limiter import limiter
+from app.core.dbt_runner import run_dbt_async
 from datetime import datetime
 import uuid
 
@@ -17,81 +16,46 @@ async def run_silver_pipeline(
     request: Request,
     pipeline_name: str,
     force: bool = False,
-    admin_verified: bool = Depends(verify_admin_secret)
+    admin_verified: bool = Depends(verify_admin_secret),
+    job_manager: JobManager = Depends(get_job_manager),
 ):
     """
-    Run a specific silver layer pipeline with dependencies.
-    
+    Run silver layer via DBT. pipeline_name can be a model name or "all" to run all silver models.
+
     **Requires admin authentication.**
-    
-    Args:
-        pipeline_name: Name of the silver pipeline to run
-        force: Force reprocessing
-        admin_verified: Admin authentication
-        
-    Returns:
-        Pipeline run response with job ID and status
     """
-    executor = get_pipeline_executor()
-    job_manager = get_job_manager()
-    
+    job = await job_manager.create_job(f"silver.{pipeline_name} (dbt)", total_tasks=1)
+    job_id = job.job_id
+    await job_manager.update_job_progress(job_id, status=JobStatus.RUNNING)
+
     try:
-        # Create a job for this pipeline execution (including dependencies)
-        job_name = f"silver.{pipeline_name}"
-        # We don't know exact count yet, but will update as we go
-        job = job_manager.create_job(job_name, total_tasks=1)
-        job_id = job.job_id
-        
-        # Update job status to running
-        job_manager.update_job_progress(job_id, status=JobStatus.RUNNING)
-        
-        # Execute with dependencies
-        states = await executor.execute_with_dependencies(
-            PipelineLayer.SILVER,
-            pipeline_name,
-            force=force,
-            job_id=job_id
+        dbt_ok, dbt_message, dbt_code = await run_dbt_async(
+            silver_only=True,
+            run_tests=False,
         )
-        
-        # Update total tasks count now that we know
-        job_data = job_manager.get_job(job_id)
-        if job_data:
-            # Count successful and failed
-            succeeded = sum(1 for s in states if s.status == PipelineStatus.SUCCESS)
-            failed = sum(1 for s in states if s.status == PipelineStatus.FAILED)
-            total = len(states)
-            
-            # Determine final status - if any task failed, job is failed
-            if failed > 0:
-                final_status = JobStatus.FAILED
-            else:
-                final_status = JobStatus.SUCCESS
-            
-            # Update job with final counts (including total_tasks)
-            job_manager.update_job_progress(
-                job_id,
-                status=final_status,
-                total_tasks=total,
-                completed_tasks=succeeded,
-                failed_tasks=failed,
-                completed_at=datetime.utcnow()
-            )
-        
-        # Return status of the main pipeline (last one)
-        if states:
-            main_state = states[-1]
-            return {
-                "job_id": job_id,
-                "run_id": main_state.run_id,
-                "pipeline_name": pipeline_name,
-                "layer": PipelineLayer.SILVER.value,
-                "status": main_state.status.value,
-                "started_at": main_state.started_at.isoformat() if main_state.started_at else None,
-                "message": f"Pipeline {pipeline_name} and dependencies completed"
-            }
-        else:
-            raise HTTPException(status_code=500, detail="No pipelines executed")
-        
+        final_status = JobStatus.SUCCESS if dbt_ok else JobStatus.FAILED
+        await job_manager.update_job_progress(
+            job_id,
+            status=final_status,
+            completed_tasks=1 if dbt_ok else 0,
+            failed_tasks=0 if dbt_ok else 1,
+            completed_at=datetime.utcnow(),
+        )
+        return {
+            "job_id": job_id,
+            "run_id": str(uuid.uuid4()),
+            "pipeline_name": pipeline_name,
+            "layer": "silver",
+            "status": "success" if dbt_ok else "failed",
+            "started_at": datetime.utcnow().isoformat(),
+            "message": dbt_message[:500] if dbt_message else ("DBT run completed" if dbt_ok else "DBT run failed"),
+        }
     except Exception as e:
+        await job_manager.update_job_progress(
+            job_id,
+            status=JobStatus.FAILED,
+            failed_tasks=1,
+            completed_at=datetime.utcnow(),
+        )
         raise HTTPException(status_code=500, detail=str(e))
 

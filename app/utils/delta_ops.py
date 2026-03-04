@@ -1,13 +1,35 @@
-"""Delta Lake operations utilities."""
-import pandas as pd
-import pyarrow as pa
-from deltalake import DeltaTable, write_deltalake
-from typing import Optional, List, Dict, Any
+"""Delta Lake and Parquet operations (S3/Scaleway)."""
+import io
 import logging
-from google.cloud import storage
+from typing import Optional, List, Dict, Any
+
+import pandas as pd
+import pyarrow.parquet as pq
+from deltalake import DeltaTable, write_deltalake
+
 from app.core.config import get_settings
+from app.utils.s3_ops import get_s3_operations
 
 logger = logging.getLogger(__name__)
+
+
+def _s3_storage_options() -> Dict[str, str]:
+    """Build storage_options for deltalake when using S3 (Scaleway)."""
+    s = get_settings()
+    return {
+        "AWS_ACCESS_KEY_ID": s.scw_access_key,
+        "AWS_SECRET_ACCESS_KEY": s.scw_secret_key,
+        "AWS_ENDPOINT_URL": s.scw_object_storage_endpoint,
+        "AWS_REGION": s.scw_region,
+    }
+
+
+def _is_s3_path(path: str) -> bool:
+    return path.startswith("s3://")
+
+
+def _is_parquet_path(path: str) -> bool:
+    return path.rstrip("/").endswith(".parquet")
 
 
 class DeltaOperations:
@@ -16,19 +38,20 @@ class DeltaOperations:
     @staticmethod
     def read_delta(table_path: str, columns: Optional[List[str]] = None) -> pd.DataFrame:
         """
-        Read a Delta table into a pandas DataFrame.
+        Read a Delta table into a pandas DataFrame (supports S3).
         
         Args:
-            table_path: Path to Delta table (gs://bucket/path)
+            table_path: Path to Delta table (s3://bucket/path)
             columns: Optional list of columns to read
             
         Returns:
             pandas DataFrame
         """
-        logger.info(f"Reading Delta table from {table_path}")
-        dt = DeltaTable(table_path)
+        logger.info("Reading Delta table from %s", table_path)
+        opts = _s3_storage_options() if _is_s3_path(table_path) else None
+        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
         df = dt.to_pandas(columns=columns)
-        logger.info(f"Read {len(df)} rows from Delta table")
+        logger.info("Read %d rows from Delta table", len(df))
         return df
     
     @staticmethod
@@ -49,16 +72,17 @@ class DeltaOperations:
             partition_by: Optional list of columns to partition by
             schema_mode: How to handle schema changes (merge/overwrite)
         """
-        logger.info(f"Writing {len(df)} rows to Delta table at {table_path}")
-        
+        logger.info("Writing %d rows to Delta table at %s", len(df), table_path)
+        opts = _s3_storage_options() if _is_s3_path(table_path) else None
+        kw = {"storage_options": opts} if opts else {}
         try:
-            # Try writing with schema_mode first (works in newer deltalake versions)
             write_deltalake(
                 table_path,
                 df,
                 mode=mode,
                 partition_by=partition_by,
-                schema_mode=schema_mode
+                schema_mode=schema_mode,
+                **kw,
             )
             logger.info(f"Successfully wrote to Delta table with schema_mode={schema_mode}")
         except TypeError as e:
@@ -70,7 +94,8 @@ class DeltaOperations:
                         table_path,
                         df,
                         mode=mode,
-                        partition_by=partition_by
+                        partition_by=partition_by,
+                        **kw,
                     )
                     logger.info(f"Successfully wrote to Delta table")
                 except Exception as schema_error:
@@ -80,8 +105,7 @@ class DeltaOperations:
                         # Schema mismatch - need to delete table and recreate with new schema
                         logger.warning(f"Schema mismatch detected, deleting old table and creating with new schema")
                         try:
-                            # Delete the existing table by loading it and using overwrite with engine='rust'
-                            dt = DeltaTable(table_path)
+                            dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
                             logger.warning(f"Found existing table at version {dt.version()}, will replace with new schema")
                         except Exception:
                             logger.warning(f"No existing table found or couldn't load it")
@@ -92,23 +116,22 @@ class DeltaOperations:
                             df,
                             mode="overwrite",
                             partition_by=partition_by,
-                            engine='rust',
-                            overwrite_schema=True
+                            engine="rust",
+                            overwrite_schema=True,
+                            **kw,
                         )
-                        logger.info(f"Successfully replaced Delta table with new schema")
+                        logger.info("Successfully replaced Delta table with new schema")
                     else:
                         raise
             else:
                 raise
         except Exception as e:
-            # Handle schema mismatch errors with broadest exception catching
             error_msg = str(e)
-            logger.warning(f"Write failed at top level with error: {type(e).__name__}: {error_msg}")
+            logger.warning("Write failed at top level with error: %s: %s", type(e).__name__, error_msg)
             if "Schema of data does not match" in error_msg or "schema" in error_msg.lower():
-                # Schema mismatch - need to replace table with new schema
-                logger.warning(f"Schema mismatch detected, replacing table with new schema")
+                logger.warning("Schema mismatch detected, replacing table with new schema")
                 try:
-                    dt = DeltaTable(table_path)
+                    dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
                     logger.warning(f"Found existing table at version {dt.version()}, will replace with new schema")
                 except Exception:
                     logger.warning(f"No existing table found or couldn't load it")
@@ -119,17 +142,18 @@ class DeltaOperations:
                     df,
                     mode="overwrite",
                     partition_by=partition_by,
-                    engine='rust',
-                    overwrite_schema=True
+                    engine="rust",
+                    overwrite_schema=True,
+                    **kw,
                 )
-                logger.info(f"Successfully replaced Delta table with new schema")
+                logger.info("Successfully replaced Delta table with new schema")
             else:
                 raise
     
     @staticmethod
     def table_exists(table_path: str) -> bool:
         """
-        Check if a Delta table exists.
+        Check if a Delta table exists (S3 or local).
         
         Args:
             table_path: Path to Delta table
@@ -138,7 +162,11 @@ class DeltaOperations:
             True if table exists, False otherwise
         """
         try:
-            DeltaTable(table_path)
+            opts = _s3_storage_options() if _is_s3_path(table_path) else None
+            if opts:
+                DeltaTable(table_path, storage_options=opts)
+            else:
+                DeltaTable(table_path)
             return True
         except Exception:
             return False
@@ -146,7 +174,7 @@ class DeltaOperations:
     @staticmethod
     def get_table_info(table_path: str) -> Dict[str, Any]:
         """
-        Get information about a Delta table.
+        Get information about a Delta table (S3 or local).
         
         Args:
             table_path: Path to Delta table
@@ -154,7 +182,8 @@ class DeltaOperations:
         Returns:
             Dictionary with table information
         """
-        dt = DeltaTable(table_path)
+        opts = _s3_storage_options() if _is_s3_path(table_path) else None
+        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
         schema = dt.schema()
         
         return {
@@ -172,8 +201,9 @@ class DeltaOperations:
         Args:
             table_path: Path to Delta table
         """
-        logger.info(f"Optimizing Delta table at {table_path}")
-        dt = DeltaTable(table_path)
+        logger.info("Optimizing Delta table at %s", table_path)
+        opts = _s3_storage_options() if _is_s3_path(table_path) else None
+        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
         # Note: optimize and vacuum are not yet available in deltalake Python
         # This is a placeholder for future implementation
         logger.warning("Table optimization not yet implemented in deltalake Python")
@@ -244,98 +274,161 @@ class DeltaOperations:
     @staticmethod
     def list_delta_tables(base_path: str) -> List[Dict[str, Any]]:
         """
-        List all Delta tables under a given base path by scanning GCS.
+        List all Delta tables under a given base path (S3).
         
         Args:
-            base_path: Base path to scan (e.g., gs://bucket/delta/bronze)
+            base_path: Base path to scan (e.g. s3://bucket/bronze)
             
         Returns:
             List of dictionaries with table information
         """
-        logger.info(f"Scanning for Delta tables in {base_path}")
-        settings = get_settings()
-        
-        # Parse GCS path
-        path_parts = base_path.replace(f"gs://{settings.gcs_bucket}/", "")
-        
-        # Initialize GCS client
-        client = storage.Client(project=settings.gcp_project_id)
-        bucket = client.bucket(settings.gcs_bucket)
-        
-        # List all blobs with _delta_log directories
-        blobs = client.list_blobs(settings.gcs_bucket, prefix=path_parts)
-        
-        # Find unique Delta tables by looking for _delta_log directories
+        logger.info("Scanning for Delta tables in %s", base_path)
+        s3 = get_s3_operations()
+        all_files = s3.list_files(base_path)
         delta_tables = set()
-        for blob in blobs:
-            if "_delta_log/" in blob.name:
-                # Extract table path (everything before _delta_log)
-                table_path = blob.name.split("_delta_log/")[0].rstrip("/")
+        for full_path in all_files:
+            key = full_path.split("/", 3)[-1] if full_path.startswith("s3://") else full_path
+            if "_delta_log/" in key:
+                table_path = key.split("_delta_log/")[0].rstrip("/")
                 delta_tables.add(table_path)
-        
-        # Get information about each table
+        settings = get_settings()
+        bucket = settings.scw_bucket_name
         tables = []
+        opts = _s3_storage_options()
         for table_path in sorted(delta_tables):
-            full_path = f"gs://{settings.gcs_bucket}/{table_path}"
-            # Extract table name (last part of path)
+            full_path = f"s3://{bucket}/{table_path}"
             table_name = table_path.split("/")[-1]
-            
             try:
-                dt = DeltaTable(full_path)
+                dt = DeltaTable(full_path, storage_options=opts)
                 tables.append({
                     "name": table_name,
                     "path": full_path,
                     "version": dt.version(),
                 })
             except Exception as e:
-                logger.warning(f"Could not read Delta table at {full_path}: {e}")
-        
-        logger.info(f"Found {len(tables)} Delta tables")
+                logger.warning("Could not read Delta table at %s: %s", full_path, e)
+        logger.info("Found %d Delta tables", len(tables))
         return tables
     
     @staticmethod
     def get_table_schema(table_path: str) -> Dict[str, Any]:
         """
-        Get schema information for a Delta table.
+        Get schema for a Delta table or a single Parquet file (S3 silver).
         
         Args:
-            table_path: Path to Delta table
+            table_path: Path to Delta table or s3://.../table.parquet
             
         Returns:
-            Dictionary with schema information
+            Dictionary with fields, version, row_count, num_fields
         """
-        logger.info(f"Getting schema for {table_path}")
-        dt = DeltaTable(table_path)
-        schema = dt.schema()
-        
-        # Convert schema to PyArrow schema for iteration
-        # The delta-rs schema needs to be converted to PyArrow schema
-        arrow_schema = schema.to_pyarrow()
-        
-        # Convert PyArrow schema to a more readable format
-        fields = []
-        for field in arrow_schema:
-            fields.append({
-                "name": field.name,
-                "type": str(field.type),
-                "nullable": field.nullable
-            })
-        
-        # Get row count by reading the table
+        logger.info("Getting schema for %s", table_path)
+        if _is_parquet_path(table_path):
+            return DeltaOperations._get_parquet_schema(table_path)
+        opts = _s3_storage_options() if _is_s3_path(table_path) else None
+        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
+        arrow_schema = dt.schema().to_pyarrow()
+        fields = [
+            {"name": f.name, "type": str(f.type), "nullable": f.nullable}
+            for f in arrow_schema
+        ]
         try:
-            df = dt.to_pandas()
-            row_count = len(df)
+            row_count = len(dt.to_pandas())
         except Exception as e:
-            logger.warning(f"Could not get row count: {e}")
+            logger.warning("Could not get row count: %s", e)
             row_count = None
-        
         return {
             "fields": fields,
             "version": dt.version(),
             "row_count": row_count,
-            "num_fields": len(fields)
+            "num_fields": len(fields),
         }
-    
+
+    @staticmethod
+    def _get_parquet_schema(table_path: str) -> Dict[str, Any]:
+        """Read schema from a single Parquet file on S3."""
+        s3 = get_s3_operations()
+        content = s3.download_file(table_path)
+        table = pq.read_table(io.BytesIO(content))
+        schema = table.schema
+        fields = [
+            {"name": f.name, "type": str(f.type), "nullable": f.nullable}
+            for f in schema
+        ]
+        return {
+            "fields": fields,
+            "version": 0,
+            "row_count": table.num_rows,
+            "num_fields": len(fields),
+        }
+
+    @staticmethod
+    def read_parquet(table_path: str) -> pd.DataFrame:
+        """Read a Parquet file from S3 into a pandas DataFrame."""
+        s3 = get_s3_operations()
+        content = s3.download_file(table_path)
+        table = pq.read_table(io.BytesIO(content))
+        return table.to_pandas()
+
+    @staticmethod
+    def _preview_parquet(
+        table_path: str,
+        limit: int,
+        filters: Optional[List[Dict[str, str]]],
+        sort_by: Optional[str],
+        sort_order: str,
+    ) -> Dict[str, Any]:
+        """Preview a single Parquet file on S3."""
+        s3 = get_s3_operations()
+        content = s3.download_file(table_path)
+        table = pq.read_table(io.BytesIO(content))
+        df = table.to_pandas()
+        total_rows = len(df)
+        if filters:
+            for filter_spec in filters:
+                column = filter_spec.get("column")
+                operator = filter_spec.get("operator", "=")
+                value = filter_spec.get("value")
+                if column and column in df.columns:
+                    try:
+                        if operator == "=":
+                            df = df[df[column] == value]
+                        elif operator == "!=":
+                            df = df[df[column] != value]
+                        elif operator == "contains":
+                            df = df[df[column].astype(str).str.contains(str(value), case=False, na=False)]
+                        elif operator == ">":
+                            df = df[df[column] > float(value)]
+                        elif operator == "<":
+                            df = df[df[column] < float(value)]
+                        elif operator == ">=":
+                            df = df[df[column] >= float(value)]
+                        elif operator == "<=":
+                            df = df[df[column] <= float(value)]
+                    except Exception as e:
+                        logger.warning("Filter failed for %s %s %s: %s", column, operator, value, e)
+        filtered_rows = len(df)
+        if sort_by and sort_by in df.columns:
+            df = df.sort_values(by=sort_by, ascending=(sort_order.lower() == "asc"))
+        df_preview = df.head(limit).copy()
+        for col in df_preview.columns:
+            if pd.api.types.is_datetime64_any_dtype(df_preview[col]):
+                df_preview[col] = df_preview[col].astype(str)
+            elif df_preview[col].dtype == "object":
+                sample = df_preview[col].iloc[0] if len(df_preview) > 0 else None
+                if isinstance(sample, dict):
+                    import json
+                    df_preview[col] = df_preview[col].apply(
+                        lambda x: json.dumps(x) if isinstance(x, dict) else x
+                    )
+        records = df_preview.to_dict(orient="records")
+        return {
+            "columns": list(df_preview.columns),
+            "data": records,
+            "total_rows": total_rows,
+            "filtered_rows": filtered_rows,
+            "preview_rows": len(records),
+        }
+
     @staticmethod
     def preview_table(
         table_path: str,
@@ -357,11 +450,12 @@ class DeltaOperations:
         Returns:
             Dictionary with preview data and metadata
         """
-        logger.info(f"Previewing table {table_path} (limit={limit})")
-        
-        dt = DeltaTable(table_path)
+        logger.info("Previewing table %s (limit=%s)", table_path, limit)
+        if _is_parquet_path(table_path):
+            return DeltaOperations._preview_parquet(table_path, limit, filters, sort_by, sort_order)
+        opts = _s3_storage_options() if _is_s3_path(table_path) else None
+        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
         df = dt.to_pandas()
-        
         total_rows = len(df)
         
         # Apply filters if provided

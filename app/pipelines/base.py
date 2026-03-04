@@ -7,7 +7,7 @@ import hashlib
 import logging
 
 from app.core.config import get_settings
-from app.utils.gcs_ops import get_gcs_operations
+from app.utils.s3_ops import get_s3_operations
 from app.utils.delta_ops import DeltaOperations
 from app.utils.checkpoint import get_checkpoint_manager
 from app.utils.sql_executor import get_sql_executor
@@ -21,7 +21,7 @@ class BasePipeline(ABC):
     def __init__(self):
         """Initialize pipeline."""
         self.settings = get_settings()
-        self.gcs = get_gcs_operations()
+        self.s3 = get_s3_operations()
         self.delta_ops = DeltaOperations()
         self.checkpoint_mgr = get_checkpoint_manager()
         self.stats = {
@@ -53,13 +53,13 @@ class BasePipeline(ABC):
         Compute hash of a file for change detection.
         
         Args:
-            file_path: GCS path to file
+            file_path: S3 path to file
             
         Returns:
             MD5 hash of file contents
         """
         try:
-            content = self.gcs.download_file(file_path)
+            content = self.s3.download_file(file_path)
             return hashlib.md5(content).hexdigest()
         except Exception as e:
             logger.warning(f"Could not compute hash for {file_path}: {e}")
@@ -71,7 +71,7 @@ class BaseBronzePipeline(BasePipeline):
     
     @abstractmethod
     def get_source_path(self) -> str:
-        """Get GCS path to source files."""
+        """Get S3 path to source files."""
         pass
     
     @abstractmethod
@@ -85,7 +85,7 @@ class BaseBronzePipeline(BasePipeline):
         Read a source file into a DataFrame.
         
         Args:
-            file_path: GCS path to source file
+            file_path: S3 path to source file
             
         Returns:
             pandas DataFrame
@@ -130,10 +130,7 @@ class BaseBronzePipeline(BasePipeline):
             List of file paths to process
         """
         source_path = self.get_source_path()
-        # Extract prefix from gs://bucket/prefix
-        prefix = source_path.replace(f"gs://{self.settings.gcs_bucket}/", "")
-        
-        all_files = self.gcs.list_files(prefix)
+        all_files = self.s3.list_files(source_path)
         
         # Process all files matching Databricks Auto Loader behavior
         # (Changed from "latest file only" to match Databricks streaming behavior)

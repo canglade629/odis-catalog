@@ -25,11 +25,11 @@ class BronzeSIAEStructuresPipeline(BaseBronzePipeline):
         return "siae_structures"
     
     def read_source_file(self, file_path: str) -> pd.DataFrame:
-        """Read CSV file from GCS."""
+        """Read CSV file from S3."""
         logger.info(f"Reading SIAE structures CSV from: {file_path}")
         
         # Download file content
-        file_content = self.gcs.download_file(file_path)
+        file_content = self.s3.download_file(file_path)
         
         # Parse CSV with explicit dtypes to ensure proper string handling
         import io

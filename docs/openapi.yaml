@@ -6,7 +6,7 @@ info:
     \n* **Multi-layer architecture**: Bronze (ingestion), Silver (transformation),\
     \ Gold (aggregation)\n* **Delta Lake storage**: Efficient data lake with ACID\
     \ transactions\n* **API-driven**: RESTful API for pipeline orchestration\n* **Authenticated**:\
-    \ Secure API key authentication\n* **Scalable**: Runs on Google Cloud Run\n\n\
+    \ Secure API key authentication\n* **Scalable**: Runs on Docker/Coolify\n\n\
     ### Authentication\n\nAll endpoints require an API key in the Authorization header:\n\
     \n```\nAuthorization: Bearer sk_live_YOUR_API_KEY\n```\n\n### Available Pipelines\n\
     \n**Bronze Layer (Data Ingestion)**:\n- accueillants, geo, logement, gares, lignes,\
@@ -271,7 +271,7 @@ paths:
       tags:
       - files
       summary: Upload File
-      description: "Upload a file to the raw data folder in GCS.\n\nArgs:\n    domain:\
+      description: "Upload a file to the raw data folder in S3.\n\nArgs:\n    domain:\
         \ Domain/folder name (e.g., 'accueillants', 'geo', 'logement')\n    file:\
         \ File to upload\n    api_key: API key for authentication\n    \nReturns:\n\
         \    File upload response with destination path"
@@ -342,7 +342,7 @@ paths:
       description: 'Get the complete data catalog with all schemas and tables.
 
 
-        Scans GCS for Delta tables in bronze, silver, and gold layers.'
+        Scans S3 for Delta/Parquet tables in bronze, silver, and gold layers.'
       operationId: get_catalog_api_data_catalog_get
       responses:
         '200':
@@ -534,7 +534,7 @@ paths:
       - admin
       summary: List All Api Keys
       description: "List all API keys (without plaintext keys).\n\nRequires admin\
-        \ authentication via ADMIN_SECRET.\n\nArgs:\n    db: Firestore async client\n\
+        \ authentication via ADMIN_SECRET.\n\nArgs:\n    db: Database session (PostgreSQL)\n\
         \    \nReturns:\n    List of API key metadata"
       operationId: list_all_api_keys_admin_api_keys_get
       responses:
@@ -555,7 +555,7 @@ paths:
       summary: Create New Api Key
       description: "Create a new API key for a user.\n\nRequires admin authentication\
         \ via ADMIN_SECRET.\n\nArgs:\n    request: Contains user_id for the new API\
-        \ key\n    db: Firestore async client\n    \nReturns:\n    The newly created\
+        \ key\n    db: Database session (PostgreSQL)\n    \nReturns:\n    The newly created\
         \ API key (shown only once)"
       operationId: create_new_api_key_admin_api_keys_post
       requestBody:
@@ -586,7 +586,7 @@ paths:
       summary: Revoke Existing Api Key
       description: "Revoke an API key (soft delete - sets active=False).\n\nRequires\
         \ admin authentication via ADMIN_SECRET.\n\nArgs:\n    request: Contains the\
-        \ API key to revoke\n    db: Firestore async client\n    \nReturns:\n    Success\
+        \ API key to revoke\n    db: Database session (PostgreSQL)\n    \nReturns:\n    Success\
         \ message"
       operationId: revoke_existing_api_key_admin_api_keys_revoke_delete
       requestBody:
@@ -614,9 +614,9 @@ paths:
       tags:
       - admin
       summary: Delete Existing Api Key
-      description: "Permanently delete an API key from Firestore.\n\nRequires admin\
+      description: "Permanently delete an API key from the database.\n\nRequires admin\
         \ authentication via ADMIN_SECRET.\n\nArgs:\n    request: Contains the API\
-        \ key to delete\n    db: Firestore async client\n    \nReturns:\n    Success\
+        \ key to delete\n    db: Database session (PostgreSQL)\n    \nReturns:\n    Success\
         \ message"
       operationId: delete_existing_api_key_admin_api_keys_delete_delete
       requestBody:

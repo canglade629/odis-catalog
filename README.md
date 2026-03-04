@@ -2,6 +2,44 @@
 
 A cloud-based data pipeline platform built with FastAPI and Delta Lake. The Odace Data Pipeline provides a REST API for managing data ingestion, transformation, and processing across bronze, silver, and gold data layers.
 
+## Running locally (Docker + S3 + PostgreSQL)
+
+The app runs in a container using **Scaleway S3** for storage and **PostgreSQL** for API keys, catalogue, jobs, and certifications.
+
+1. **Configure environment**: Copy `env.template` to `.env` and set:
+   - `SCW_*` (Scaleway S3)
+   - `PG_DB_*` or `DATABASE_URL` (PostgreSQL)
+   - `ADMIN_SECRET`, `ENVIRONMENT`, `CORS_ORIGINS`
+
+2. **Apply DB schema once** (if not already done):
+   ```bash
+   psql -h $PG_DB_HOST -p $PG_DB_PORT -d $PG_DB_NAME -U $PG_DB_USER -f app/db/schema.sql
+   ```
+
+3. **Build and run**:
+   ```bash
+   docker compose up --build
+   # Or: docker build -t odace-pipeline . && docker run -p 8080:8080 --env-file .env odace-pipeline
+   ```
+   API: http://localhost:8080. Health: http://localhost:8080/health.
+
+4. **Optional – sync catalogue from YAML to DB**:
+   ```bash
+   python scripts/sync_catalogue_to_db.py
+   ```
+
+## Deploy with Coolify
+
+You can deploy this app to [Coolify](https://coolify.io) (self-hosted PaaS) in one click.
+
+1. **Connect the repo**: In Coolify, create a new resource and connect this Git repository (public, or via GitHub App / Deploy Key).
+2. **Build**: Coolify will detect `coolify.json` and use the **Dockerfile** build pack with port **8080**.
+3. **Environment variables**: In Coolify’s “Environment Variables” for the application, set the same variables as in `env.template`:
+   - `SCW_OBJECT_STORAGE_ENDPOINT`, `SCW_REGION`, `SCW_BUCKET_NAME`, `SCW_ACCESS_KEY`, `SCW_SECRET_KEY` (Scaleway S3)
+   - `PG_DB_HOST`, `PG_DB_PORT`, `PG_DB_NAME`, `PG_DB_USER`, `PG_DB_PWD` (or `DATABASE_URL`)
+   - `ADMIN_SECRET`, `ENVIRONMENT`, `CORS_ORIGINS`
+4. **Post-deploy**: Apply the database schema once (e.g. from your machine: `psql -h $PG_DB_HOST ... -f app/db/schema.sql`). Optionally run `python scripts/sync_catalogue_to_db.py` to sync the catalogue from YAML to the DB.
+
 ## What is Odace?
 
 Odace is a data pipeline platform that:
@@ -9,7 +47,7 @@ Odace is a data pipeline platform that:
 - Transforms and cleans data (Silver layer)
 - Provides aggregated business metrics (Gold layer)
 - Offers a REST API for pipeline orchestration
-- Includes a web UI for monitoring and management
+- Includes a web UI for monitoring and management (Tailwind CSS)
 
 ## For API Users
 
@@ -34,20 +72,20 @@ Authorization: Bearer sk_live_YOUR_API_KEY
 1. **Test your API key**:
    ```bash
    curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-        https://odace-pipeline-588398598428.europe-west1.run.app/api/pipeline/list
+        https://your-deployment-url/api/pipeline/list
    ```
 
 2. **View available pipelines**:
    ```bash
    curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-        https://odace-pipeline-588398598428.europe-west1.run.app/api/pipeline/list?layer=bronze
+        https://your-deployment-url/api/pipeline/list?layer=bronze
    ```
 
 3. **Run a pipeline**:
    ```bash
    curl -X POST \
         -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-        https://odace-pipeline-588398598428.europe-west1.run.app/api/bronze/geo
+        https://your-deployment-url/api/bronze/geo
    ```
 
 ## Core API Endpoints
@@ -93,7 +131,7 @@ curl -X POST \
   -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"force": true}' \
-  https://odace-pipeline-588398598428.europe-west1.run.app/api/pipeline/run
+  https://your-deployment-url/api/pipeline/run
 ```
 
 **Expected Response**:
@@ -133,7 +171,7 @@ curl -X POST \
     "silver_only": false,
     "force": true
   }' \
-  https://odace-pipeline-588398598428.europe-west1.run.app/api/pipeline/run
+  https://your-deployment-url/api/pipeline/run
 ```
 - **Executes**: 6 bronze + 6 silver = 12 total pipelines
 - **Duration**: ~2-3 minutes
@@ -149,7 +187,7 @@ curl -X POST \
     "bronze_only": true,
     "force": true
   }' \
-  https://odace-pipeline-588398598428.europe-west1.run.app/api/pipeline/run
+  https://your-deployment-url/api/pipeline/run
 ```
 - **Executes**: 6 bronze pipelines
 - **Duration**: ~1-2 minutes
@@ -165,7 +203,7 @@ curl -X POST \
     "silver_only": true,
     "force": true
   }' \
-  https://odace-pipeline-588398598428.europe-west1.run.app/api/pipeline/run
+  https://your-deployment-url/api/pipeline/run
 ```
 - **Executes**: 6 silver pipelines
 - **Duration**: ~1 minute
@@ -180,7 +218,7 @@ curl -X POST \
   -d '{
     "force": false
   }' \
-  https://odace-pipeline-588398598428.europe-west1.run.app/api/pipeline/run
+  https://your-deployment-url/api/pipeline/run
 ```
 - **Executes**: Only pipelines with new data
 - **Duration**: Varies (only processes changes)
@@ -200,13 +238,13 @@ curl -X POST \
 **1. Check job status**:
 ```bash
 curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-  https://odace-pipeline-588398598428.europe-west1.run.app/api/jobs/{job_id}
+  https://your-deployment-url/api/jobs/{job_id}
 ```
 
 **2. List recent jobs**:
 ```bash
 curl -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
-  https://odace-pipeline-588398598428.europe-west1.run.app/api/jobs?limit=10
+  https://your-deployment-url/api/jobs?limit=10
 ```
 
 **3. View task details**:
@@ -282,7 +320,7 @@ curl -X POST \
   -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"force": true}' \
-  https://odace-pipeline-588398598428.europe-west1.run.app/api/pipeline/run
+  https://your-deployment-url/api/pipeline/run
 ```
 
 The pipeline is **idempotent**, so re-running will clear the error and produce correct results.
@@ -318,14 +356,14 @@ Example with curl:
 curl -X POST \
      -H "Authorization: Bearer sk_live_YOUR_API_KEY" \
      -F "file=@myfile.csv" \
-     "https://odace-pipeline-588398598428.europe-west1.run.app/api/files/upload?domain=logement"
+     "https://your-deployment-url/api/files/upload?domain=logement"
 ```
 
 ### API Documentation
 
 Visit the interactive API documentation at:
 ```
-https://odace-pipeline-588398598428.europe-west1.run.app/docs
+https://your-deployment-url/docs
 ```
 
 ## Available Pipelines
@@ -471,58 +509,24 @@ GROUP BY s.city, s.insee_code
 ## Additional Documentation
 
 For developers and administrators:
-- **[Pipeline Configuration Guide](docs/PIPELINE_CONFIGURATION.md)** - Complete guide to YAML-based pipeline configuration
+- **[Pipelines](docs/pipelines.md)** - How pipelines are registered (YAML), run (API and scripts), and data catalogue
+- **[DBT migration preparation](docs/MIGRATION_DBT.md)** - Pipeline inventory, dependency graph, and config for a future DBT migration
 - [API Key Management](docs/API_KEY_USAGE.md) - Complete guide to API key creation and management
 - [Data Model Reference](DATA_MODEL.md) - Silver layer schema and table relationships
-- [Implementation Details](docs/IMPLEMENTATION_SUMMARY.md) - Technical architecture and design
+- [Implementation Details](docs/archive/IMPLEMENTATION_SUMMARY.md) - Technical architecture and design (archive)
 
 ## API Key Management for Administrators
 
-### Generating API Keys for New Users
+### Managing API Keys
 
-To create a new API key and email for a user:
+Use the **Admin API** (with `ADMIN_SECRET` in the `Authorization: Bearer` header):
 
-```bash
-python3 scripts/send_api_key_email.py
-```
+- **Create a key**: `POST /api/admin/api-keys` with body `{"user_id": "user@example.com"}`
+- **List keys**: `GET /api/admin/api-keys`
+- **Revoke**: `DELETE /api/admin/api-keys/revoke` with body `{"api_key": "sk_live_..."}`
+- **Delete**: `DELETE /api/admin/api-keys/delete` with body `{"api_key": "sk_live_..."}`
 
-This interactive script will:
-1. Prompt for the user's email address
-2. Create a new API key in Firestore
-3. Generate a professional French HTML email with:
-   - The API key
-   - Usage instructions and code examples
-   - Security best practices
-   - Links to documentation at https://odace-pipeline-588398598428.europe-west1.run.app/docs
-
-The HTML email file will be saved in `scripts/email_templates/` and can be copied directly into Gmail.
-
-**Email sending steps:**
-1. Open the generated HTML file
-2. Copy all content (Cmd+A, Cmd+C)
-3. In Gmail: New message → ⋮ → "Show original HTML"
-4. Paste content and send to user
-5. Delete the HTML file after sending (for security)
-
-### Manual API Key Management
-
-You can also manage API keys via CLI:
-
-```bash
-# Create a key
-python scripts/manage_api_keys.py create user@example.com
-
-# List all keys
-python scripts/manage_api_keys.py list
-
-# Revoke a key
-python scripts/manage_api_keys.py revoke sk_live_...
-
-# Delete a key
-python scripts/manage_api_keys.py delete sk_live_...
-```
-
-See [API Key Usage Guide](docs/API_KEY_USAGE.md) for complete documentation.
+See [API Key Usage Guide](docs/API_KEY_USAGE.md) for full documentation.
 
 ## Local Development
 
@@ -533,7 +537,7 @@ For developers setting up the project locally:
    git clone <repository>
    cd odace_backend
    cp env.template .env
-   # Edit .env with your GCP credentials
+   # Edit .env with Scaleway S3 and PostgreSQL settings (see env.template)
    ```
 
 2. **Install dependencies**:
@@ -550,7 +554,7 @@ For developers setting up the project locally:
    - UI: http://localhost:8080
    - API Docs: http://localhost:8080/docs
 
-See [Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md) for detailed deployment instructions.
+Storage: [Scaleway S3](docs/SCALEWAY_S3.md). Database: [PostgreSQL](docs/POSTGRESQL.md). Pipelines: [docs/pipelines.md](docs/pipelines.md).
 
 ## License
 

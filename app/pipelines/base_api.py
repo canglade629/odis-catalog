@@ -86,7 +86,7 @@ class BaseAPIBronzePipeline(BaseBronzePipeline):
         """
         Override to return a dummy path for API sources.
         
-        API pipelines don't read from GCS files, so we return a marker.
+        API pipelines don't read from S3 files, so we return a marker.
         """
         return "api://siae"
     
@@ -252,14 +252,14 @@ class BaseAPIBronzePipeline(BaseBronzePipeline):
     
     def save_raw_data(self, records: List[Dict[str, Any]], table_name: str) -> str:
         """
-        Save raw JSON data to GCS raw layer with timestamp.
+        Save raw JSON data to S3 raw layer with timestamp.
         
         Args:
             records: List of JSON records
             table_name: Name of the target table
             
         Returns:
-            GCS path where raw data was saved
+            S3 path where raw data was saved
         """
         import json
         from datetime import datetime
@@ -274,9 +274,9 @@ class BaseAPIBronzePipeline(BaseBronzePipeline):
         # Convert records to JSON
         json_content = json.dumps(records, indent=2, ensure_ascii=False)
         
-        # Upload to GCS
+        # Upload to S3
         logger.info(f"Saving raw data to {raw_path}")
-        self.gcs.upload_from_string(json_content, raw_path)
+        self.s3.upload_from_string(json_content, raw_path)
         
         logger.info(f"Saved {len(records)} records to {raw_path}")
         return raw_path
@@ -284,7 +284,7 @@ class BaseAPIBronzePipeline(BaseBronzePipeline):
     def read_source_file(self, file_path: str) -> pd.DataFrame:
         """
         Read data for API pipeline with smart caching:
-        1. Check if raw files exist in GCS -> use them
+        1. Check if raw files exist in S3 -> use them
         2. If no raw files, fetch from API and save to raw
         
         Args:
@@ -299,7 +299,8 @@ class BaseAPIBronzePipeline(BaseBronzePipeline):
         # Check if raw files already exist
         try:
             logger.info(f"Checking for existing raw files in {raw_base_path}")
-            raw_files = self.gcs.list_files(raw_base_path, pattern="*.json")
+            all_files = self.s3.list_files(raw_base_path)
+            raw_files = [f for f in all_files if f.endswith(".json")]
             
             if raw_files:
                 # Use the most recent raw file
@@ -308,7 +309,7 @@ class BaseAPIBronzePipeline(BaseBronzePipeline):
                 
                 # Read from raw file
                 import json
-                raw_content = self.gcs.download_file(latest_raw_file)
+                raw_content = self.s3.download_file(latest_raw_file)
                 records = json.loads(raw_content)
                 
                 # Convert to DataFrame
@@ -324,7 +325,7 @@ class BaseAPIBronzePipeline(BaseBronzePipeline):
         # Fetch data asynchronously
         records = asyncio.run(self.fetch_all_data())
         
-        # Save raw data to GCS raw layer
+        # Save raw data to S3 raw layer
         self.save_raw_data(records, table_name)
         
         # Convert to DataFrame

@@ -1,12 +1,11 @@
 """Bronze layer API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.core.auth import verify_api_key, verify_admin_secret
-from app.core.models import PipelineRunRequest, PipelineRunResponse, PipelineLayer, PipelineStatus
-from app.core.pipeline_executor import get_pipeline_executor
-from app.core.job_manager import get_job_manager, JobStatus
+from app.core.auth import verify_admin_secret
+from app.core.models import PipelineLayer, PipelineStatus
+from app.core.pipeline_executor import PipelineExecutor, get_pipeline_executor
+from app.core.job_manager import JobManager, get_job_manager, JobStatus
 from app.core.rate_limiter import limiter
 from datetime import datetime
-import uuid
 
 router = APIRouter(prefix="/api/bronze", tags=["bronze"])
 
@@ -17,7 +16,9 @@ async def run_bronze_pipeline(
     request: Request,
     pipeline_name: str,
     force: bool = False,
-    admin_verified: bool = Depends(verify_admin_secret)
+    admin_verified: bool = Depends(verify_admin_secret),
+    executor: PipelineExecutor = Depends(get_pipeline_executor),
+    job_manager: JobManager = Depends(get_job_manager),
 ):
     """
     Run a specific bronze layer pipeline.
@@ -32,34 +33,26 @@ async def run_bronze_pipeline(
     Returns:
         Pipeline run response with job ID and status
     """
-    executor = get_pipeline_executor()
-    job_manager = get_job_manager()
-    
     try:
-        # Create a job for this single pipeline execution
         job_name = f"bronze.{pipeline_name}"
-        job = job_manager.create_job(job_name, total_tasks=1)
+        job = await job_manager.create_job(job_name, total_tasks=1)
         job_id = job.job_id
-        
-        # Update job status to running
-        job_manager.update_job_progress(job_id, status=JobStatus.RUNNING)
-        
-        # Execute pipeline
+        await job_manager.update_job_progress(job_id, status=JobStatus.RUNNING)
+
         state = await executor.execute_pipeline(
             PipelineLayer.BRONZE,
             pipeline_name,
             force=force,
-            job_id=job_id
+            job_id=job_id,
         )
-        
-        # Update job status based on result
+
         final_status = JobStatus.SUCCESS if state.status == PipelineStatus.SUCCESS else JobStatus.FAILED
-        job_manager.update_job_progress(
+        await job_manager.update_job_progress(
             job_id,
             status=final_status,
             completed_tasks=1 if state.status == PipelineStatus.SUCCESS else 0,
             failed_tasks=1 if state.status == PipelineStatus.FAILED else 0,
-            completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow(),
         )
         
         return {

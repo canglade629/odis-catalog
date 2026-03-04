@@ -21,11 +21,11 @@ class BronzeZonesAttractionPipeline(BaseBronzePipeline):
         return "zones_attraction"
     
     def read_source_file(self, file_path: str) -> pd.DataFrame:
-        """Read Excel file with specific sheet from GCS."""
+        """Read Excel file with specific sheet from S3."""
         logger.info(f"Reading Excel file: {file_path}")
         
         # Download file to memory
-        file_stream = self.gcs.download_to_stream(file_path)
+        file_stream = self.s3.download_to_stream(file_path)
         
         # Read Excel file: skip first 5 rows, then header on row 6
         df = pd.read_excel(

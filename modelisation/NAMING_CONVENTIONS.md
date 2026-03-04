@@ -8,59 +8,73 @@
 
 ## Principes Généraux
 
-### Règle Fondamentale : Séparation Entité / Opération
+### Règle Fondamentale : Séparation Métier / Technique
 
-- **Entités du domaine** → **Français** (les "choses" que vous mesurez : loyer, commune, logement)
-- **Tout le reste** → **Anglais** (attributs, opérations, transformations, technique)
+- **Concepts métier** → **Français** (entités, attributs, unités - tout ce qui a un sens business)
+- **Concepts techniques** → **Anglais** (suffixes de clés, opérations, agrégations, métadonnées, stockage)
 
 ### Structure de Nommage
 
+La structure générale suit ce pattern, avec application des **règles de concision** :
+
 ```
-[domain_entity]_[attribute]_[unit]_[technical_suffix]
+[indicateur_metier]_[qualificatif_abrege]_[suffixe_technique]
 ```
 
-**Exemples** :
-- `loyer_predicted_m2` (entité: loyer, attribut: predicted, unité: m2)
-- `count_observations_grid` (opération: count, cible: observations, contexte: grid)
-- `commune_sk` (entité: commune, suffixe technique: SK)
+**Principes** :
+- L'**indicateur métier** peut inclure l'unité quand elle fait partie intégrante du concept (ex: `loyer_m2`)
+- Les **qualificatifs statistiques** (min, max, moy, nb...) sont abrégés et placés **à la fin**
+- Les **concepts métier** ne sont **jamais abrégés**
+- Les **suffixes techniques** (_sk, _code, _name...) sont toujours en anglais
+
+**Exemples avec règles de concision appliquées** :
+- `loyer_m2` → indicateur métier (loyer au mètre carré est un concept à part entière)
+- `loyer_m2_min` → indicateur métier + qualificatif statistique (borne inférieure)
+- `loyer_m2_max` → indicateur métier + qualificatif statistique (borne supérieure)
+- `nb_observations_maille` → qualificatif abrégé + concept métier + contexte
+- `commune_sk` → entité métier + suffixe technique
 
 ---
 
 ## Langue par Type de Concept
 
-### 🇫🇷 Français (Entités du Domaine UNIQUEMENT)
+### 🇫🇷 Français (Concepts Métier)
 
-**Entités du domaine - les "choses" métier** :
-- `loyer` (rent)
-- `commune`, `epci`, `departement`, `region`, `pays` (geographic entities)
-- `annee`, `trimestre`, `mois` (time periods - but consider English for consistency)
-- `logement`, `batiment`, `proprietaire` (housing domain entities)
-- `locataire`, `bailleur` (tenant, landlord)
+**Entités du domaine** :
+- `loyer`, `commune`, `epci`, `departement`, `region`, `pays`
+- `annee`, `trimestre`, `mois`
+- `logement`, `batiment`, `proprietaire`, `locataire`, `bailleur`
 
-> **Principe** : Si c'est une entité concrète de votre domaine métier, gardez-le en français.
-
-### 🇬🇧 Anglais (Tout le Reste)
-
-**Attributs et qualificatifs** :
-- `predicted`, `observed`, `estimated`, `calculated`
-- `lower`, `upper`, `average`, `median`
+**Attributs métier** :
+- `predit`, `observe`, `estime`, `calcule`
+- `inferieur`, `superieur`, `moyen`, `median`
 - `minimum`, `maximum`, `total`
+
+**Concepts statistiques métier** :
+- `maille` (zone statistique)
+- `qualite` (qualité de prédiction)
+- `borne` (intervalle de confiance)
+- `nombre` (quantité)
+
+> **Principe** : Si le concept a un sens métier ou business, utilisez le français.
+
+### 🇬🇧 Anglais (Concepts Techniques Uniquement)
 
 **Opérations et agrégations** :
 - `count`, `sum`, `avg`, `min`, `max`
+- Ces termes sont des opérateurs SQL/techniques standards
 
-**Concepts statistiques et techniques** :
-- `grid`, `quality`, `bound`, `interval`
-- `r2_adjusted`, `confidence`, `error`
-
-**Concepts de stockage** :
-- `_sk` (Surrogate Key)
-- `_id` (Identifier)
-- `_date_utc` (Date/timestamp fields)
+**Suffixes de clés** :
+- `_sk` (Surrogate Key - clé de substitution)
+- `_bk` (Business Key - clé métier technique interne au système source)
+- `_code` (Code officiel avec signification universelle - ISO, INSEE)
+- `_name` (Libellé ou nom)
+- `_id` (Identifiant technique)
+- `_date_utc` (Champs date/timestamp en UTC)
 
 **Métadonnées système** :
 - `job_insert_id`, `job_insert_date_utc`
-- `job_modify_id`, `job_modify_date_utc`
+- `job_update_id`, `job_update_date_utc`
 
 ---
 
@@ -76,39 +90,177 @@
 ### 2. Abréviations
 
 **Interdites (sauf exceptions)** :
-- ❌ `typpred` → ✅ `prediction_type`
-- ❌ `lwr` → ✅ `lower` ou `lower_bound`
-- ❌ `upr` → ✅ `upper` ou `upper_bound`
-- ❌ `nbobs` → ✅ `count_observations`
-- ❌ `nbr` → ✅ `count` (utiliser le terme SQL standard)
+- ❌ `typpred` → ✅ `type_prediction`
+- ❌ `lwr` → ✅ `min` (abréviation statistique autorisée)
+- ❌ `upr` → ✅ `max` (abréviation statistique autorisée)
+- ❌ `nbobs` → ✅ `nb_observations` (abréviation `nb` autorisée)
+- ❌ `nbr` → ✅ `nb` (abréviation statistique autorisée)
 - ❌ `upd_date` → ✅ `update_date` ou `modify_date`
+- ❌ Abréviations métier : `loy`, `surf`, `com`, `log`, `prop`
 
-**Exceptions autorisées** :
-- ✅ `m2` (mètre carré – universellement compris)
-- ✅ `r2` (coefficient de détermination – standard statistique)
-- ✅ `epci` (acronyme officiel)
-- ✅ `insee` (acronyme officiel)
-- ✅ `utc` (fuseau horaire)
+**Abréviations AUTORISÉES (statistiques/techniques uniquement)** :
+- ✅ `min` / `max` : bornes inférieure/supérieure
+- ✅ `moy` ou `avg` : moyenne
+- ✅ `nb` : nombre
+- ✅ `pct` : pourcentage
+- ✅ `med` : médiane
+- ✅ `std` : écart-type
+- ✅ `m2` : mètre carré
+- ✅ `r2` : coefficient de détermination
+- ✅ Acronymes officiels : `epci`, `insee`, `siret`, `siren`
+- ✅ `utc` : fuseau horaire
+- ✅ Opérations SQL : `count`, `sum`, `avg`, `min`, `max` (comme préfixes)
 
 ### 3. Unités de Mesure
 
 Toujours en suffixe, collées à l'attribut :
-- `loyer_predicted_m2` (loyer prédit au mètre carré)
-- `surface_total_m2` (surface totale en mètres carrés)
-- `prix_average_euros` (si nécessaire de préciser la devise)
+- `loyer_m2` (loyer au mètre carré)
+- `loyer_m2_min`, `loyer_m2_max`, `loyer_m2_moy` (avec modificateurs statistiques)
+- `surface_totale_m2` (surface totale en mètres carrés)
+- `prix_euros_moy` (prix moyen en euros - modificateur à la fin)
 
 ### 4. Préfixes et Suffixes Obligatoires
 
 **Suffixes techniques (toujours en anglais)** :
-- `_sk` : Surrogate Key (clé de substitution)
-- `_code` : Code officiel (ex: code INSEE, code postal)
-- `_label` : Libellé officiel (ex: nom de commune)
+- `_sk` : Surrogate Key (clé de substitution) - utilisé pour les PK et FK
+- `_bk` : Business Key (clé métier interne au système source, sans signification universelle)
+- `_code` : Code officiel avec signification universelle (ex: code INSEE, ISO, SIRET)
+- `_name` : Libellé ou nom (remplace `_label`)
 - `_date_utc` : Champs de type date/timestamp en UTC
-- `_id` : Identifiant système
+- `_id` : Identifiant technique système
 
 **Préfixes de table** :
 - `dim_` : Tables de dimension
 - `fact_` : Tables de faits
+
+---
+
+## Règles de Concision
+
+### Objectif : Noms Courts et Efficaces
+
+Les noms de colonnes doivent être **explicites** mais **concis**. Éviter les noms trop longs qui nuisent à la lisibilité sans apporter de valeur.
+
+### 1. Abréger les Attributs Statistiques/Techniques Courants
+
+Pour les termes très fréquents et universellement compris en analyse de données, **utiliser des abréviations** :
+
+| Concept Complet | Abréviation | Exemple d'Usage |
+|-----------------|-------------|-----------------|
+| `minimum` / `borne_inferieure` | `min` | `loyer_m2_min` |
+| `maximum` / `borne_superieure` | `max` | `loyer_m2_max` |
+| `moyenne` | `moy` ou `avg` | `loyer_m2_moy` |
+| `nombre` | `nb` | `nb_observations_maille` |
+| `pourcentage` | `pct` | `pct_variation` |
+| `mediane` | `med` | `loyer_m2_med` |
+| `ecart_type` | `std` | `loyer_m2_std` |
+
+**Exemples de transformation :**
+```
+❌ loyer_borne_inferieure_m2  →  ✅ loyer_m2_min
+❌ loyer_borne_superieure_m2  →  ✅ loyer_m2_max
+❌ nombre_observations_maille  →  ✅ nb_observations_maille
+```
+
+### 2. Supprimer les Contextes Redondants
+
+Si une information s'applique à **toute la table**, elle n'a pas sa place dans les noms de colonnes :
+
+- ✅ Dans une table de prédictions → **pas de suffixe `_predit`**
+- ✅ Dans une table historique → **pas de suffixe `_historique`**
+- ✅ Dans une table agrégée → **pas de suffixe `_agrege`**
+
+**Exemples de simplification :**
+```
+Table: fact_loyer_predit_commune
+❌ loyer_predit_m2            →  ✅ loyer_m2
+❌ loyer_predit_min_m2        →  ✅ loyer_m2_min
+❌ loyer_predit_max_m2        →  ✅ loyer_m2_max
+
+Table: fact_emploi_historique
+❌ salaire_historique_moyen   →  ✅ salaire_moy
+```
+
+> **Principe** : Si l'information est dans le **nom de la table**, ne la répétez pas dans chaque colonne.
+
+### 3. Ordre des Qualificatifs : Concept Métier d'Abord
+
+Mettre les **modificateurs statistiques à la fin** pour regrouper visuellement les colonnes liées :
+
+✅ **Correct (groupement logique)** :
+```sql
+loyer_m2          -- Mesure principale
+loyer_m2_min      -- Borne inférieure
+loyer_m2_max      -- Borne supérieure
+loyer_m2_moy      -- Moyenne
+loyer_m2_med      -- Médiane
+loyer_m2_std      -- Écart-type
+```
+
+❌ **Incorrect (colonnes dispersées)** :
+```sql
+min_loyer_m2
+loyer_m2
+loyer_moy_m2
+max_loyer_m2
+loyer_median_m2
+```
+
+**Avantages :**
+- Les colonnes se retrouvent **côte à côte** en tri alphabétique
+- Identification rapide du **concept métier principal** (`loyer_m2`)
+- Meilleure lisibilité dans les requêtes SQL
+
+### 4. Exception : Ne Jamais Abréger les Concepts Métier
+
+Les termes du **domaine métier** doivent rester **explicites** :
+
+✅ **Toujours écrire en entier** :
+- `loyer`, `surface`, `commune`, `logement`
+- `proprietaire`, `locataire`, `bailleur`
+- `qualite`, `prediction`, `observation`
+
+❌ **Jamais abréger** :
+- ~~`loy`~~, ~~`surf`~~, ~~`com`~~, ~~`log`~~
+- ~~`prop`~~, ~~`loc`~~, ~~`bail`~~
+- ~~`qual`~~, ~~`pred`~~, ~~`obs`~~
+
+---
+
+### ✅ Règles de Concision - Résumé
+
+| # | Règle | Action |
+|---|-------|--------|
+| 1 | Abréger les opérations/qualificatifs techniques | `min`, `max`, `nb`, `moy`, `pct`, `med`, `std` |
+| 2 | Supprimer les contextes applicables à toute la table | Pas de `_predit` si table = prédictions |
+| 3 | Concept métier d'abord, qualificatif à la fin | `loyer_m2_min` pas `min_loyer_m2` |
+| 4 | Ne jamais abréger les concepts métier | `loyer` pas `loy` |
+
+---
+
+### 📋 Exemples Complets de Simplification
+
+```sql
+-- ❌ AVANT (noms trop longs et redondants)
+CREATE TABLE fact_loyer_predit_commune (
+    loyer_predit_m2                     DECIMAL(10,2),
+    loyer_borne_inferieure_predit_m2    DECIMAL(10,2),
+    loyer_borne_superieure_predit_m2    DECIMAL(10,2),
+    nombre_observations_maille          INTEGER,
+    qualite_prediction_r2_ajuste        DECIMAL(5,4)
+);
+
+-- ✅ APRÈS (noms concis et efficaces)
+CREATE TABLE fact_loyer_predit_commune (
+    loyer_m2                            DECIMAL(10,2),
+    loyer_m2_min                        DECIMAL(10,2),
+    loyer_m2_max                        DECIMAL(10,2),
+    nb_observations_maille              INTEGER,
+    qualite_r2_ajuste                   DECIMAL(5,4)
+);
+```
+
+> **Note** : `qualite_r2_ajuste` conserve "qualite" car c'est un concept métier dans le contexte de la modélisation prédictive.
 
 ---
 
@@ -118,9 +270,14 @@ Toujours en suffixe, collées à l'attribut :
 
 ```sql
 -- Clé de substitution (hash dbt ou serial)
-loyer_commune_sk        STRING
+loyer_commune_sk        STRING    -- PK
 
--- Clés étrangères
+-- Clés métier et codes
+commune_bk              STRING    -- Clé interne système source
+commune_code            STRING    -- Code INSEE (universel)
+commune_name            STRING    -- Nom de la commune
+
+-- Clés étrangères (utilisent _sk)
 commune_sk              STRING    -- FK to dim_commune
 epci_sk                 STRING    -- FK to dim_epci
 ```
@@ -128,27 +285,29 @@ epci_sk                 STRING    -- FK to dim_epci
 ### Mesures (Facts)
 
 ```sql
--- Mesures principales
-loyer_predicted_m2             DECIMAL(10,2)
-loyer_observed_m2              DECIMAL(10,2)
+-- Mesures principales (français)
+loyer_m2                       DECIMAL(10,2)   -- Contexte "prédit" dans le nom de table
+loyer_observe_m2               DECIMAL(10,2)
 
--- Bornes d'intervalle
-loyer_lower_bound_m2           DECIMAL(10,2)
-loyer_upper_bound_m2           DECIMAL(10,2)
+-- Bornes d'intervalle (abréviations statistiques)
+loyer_m2_min                   DECIMAL(10,2)
+loyer_m2_max                   DECIMAL(10,2)
+loyer_m2_moy                   DECIMAL(10,2)
+loyer_m2_med                   DECIMAL(10,2)
 
--- Compteurs
-count_observations_grid        INTEGER
-count_observations_commune     INTEGER
-count_annonces                 INTEGER
+-- Compteurs (abréviation nb)
+nb_observations_maille         INTEGER
+nb_observations_commune        INTEGER
+nb_annonces                    INTEGER
 ```
 
 ### Indicateurs de Qualité
 
 ```sql
--- Métriques statistiques
-quality_r2_adjusted            DECIMAL(5,4)    -- Entre 0 et 1
-score_confidence               DECIMAL(5,4)
-rate_completeness              DECIMAL(5,4)
+-- Métriques statistiques (français + abréviations)
+qualite_r2_ajuste              DECIMAL(5,4)    -- Entre 0 et 1
+score_confiance_pct            DECIMAL(5,4)    -- Pourcentage de confiance
+taux_completude_pct            DECIMAL(5,4)    -- Pourcentage de complétude
 ```
 
 ### Métadonnées Obligatoires
@@ -158,9 +317,56 @@ rate_completeness              DECIMAL(5,4)
 ```sql
 job_insert_id           STRING          -- Job ayant inséré la ligne
 job_insert_date_utc     TIMESTAMP_NTZ   -- Date d'insertion (UTC)
-job_modify_id           STRING          -- Job ayant modifié la ligne
-job_modify_date_utc     TIMESTAMP_NTZ   -- Date de modification (UTC)
+job_update_id           STRING          -- Job ayant modifié la ligne
+job_update_date_utc     TIMESTAMP_NTZ   -- Date de modification (UTC)
 ```
+
+### Colonne Extras (Pattern Core/Extras)
+
+**Principe** : Éviter la sur-normalisation en utilisant un stockage hybride.
+
+**Colonne obligatoire** :
+```sql
+extras                  VARIANT         -- Champs semi-structurés (JSON)
+```
+
+**Rule of Thumb** :
+- **Colonnes core** : colonnes stables + clés + attributs des clés (colonnes structurées classiques)
+- **Colonne extras** : VARIANT pour le reste (champs peu utilisés, instables, ou dont l'usage n'est pas encore confirmé)
+
+**Quand utiliser `extras` ?**
+- Champs dont l'utilité analytique n'est pas encore prouvée
+- Attributs variant selon la source de données
+- Metadata complémentaire ne justifiant pas une colonne dédiée
+- Champs expérimentaux ou en phase de test
+
+**Pattern de promotion** :
+Quand un champ stocké dans `extras` devient fréquemment utilisé dans les requêtes analytiques :
+→ Promouvoir en colonne core dédiée OU créer une table normalisée séparée avec FK
+
+**Exemple** :
+```sql
+-- Requête détectant un usage fréquent
+SELECT 
+    COUNT(*) as nb_requetes
+FROM query_history 
+WHERE query_text LIKE '%extras.nom_attribut%'
+  AND execution_date >= CURRENT_DATE - 30;
+
+-- Si nb_requetes > seuil → Promotion
+ALTER TABLE ma_table ADD COLUMN nom_attribut VARCHAR(255);
+UPDATE ma_table SET nom_attribut = extras:nom_attribut;
+```
+
+**Avantages** :
+- ✅ Flexibilité : ajout de nouveaux attributs sans migration de schéma
+- ✅ Évite la prolifération de colonnes peu utilisées
+- ✅ Permet l'évolution progressive du modèle de données
+- ✅ Réduit le coût de stockage (colonnes non indexées par défaut)
+
+**Inconvénients** :
+- ⚠️ Performance : requêtes sur VARIANT moins performantes que colonnes natives
+- ⚠️ Typage : pas de validation de type automatique (responsabilité développeur)
 
 ---
 
@@ -173,14 +379,18 @@ Les entités suivantes sont gérées par le MDM : `commune`, `departement`, `reg
 ```sql
 CREATE TABLE dim_<entite> (
     <entite>_sk      STRING,          -- Clé de substitution (hash dbt)
-    <entite>_code    STRING,          -- Code officiel MDM
-    <entite>_label   STRING,          -- Libellé officiel MDM
+    <entite>_bk      STRING,          -- Clé métier source (si applicable)
+    <entite>_code    STRING,          -- Code officiel universel (INSEE, ISO)
+    <entite>_name    STRING,          -- Libellé/nom officiel
     
     -- Métadonnées obligatoires
     job_insert_id        STRING,
     job_insert_date_utc  TIMESTAMP_NTZ,
-    job_modify_id        STRING,
-    job_modify_date_utc  TIMESTAMP_NTZ,
+    job_update_id        STRING,
+    job_update_date_utc  TIMESTAMP_NTZ,
+    
+    -- Champs semi-structurés
+    extras               VARIANT,
     
     PRIMARY KEY (<entite>_sk)
 );
@@ -191,13 +401,16 @@ CREATE TABLE dim_<entite> (
 ```sql
 CREATE TABLE dim_commune (
     commune_sk           STRING,
-    commune_insee_code   STRING,        -- Code INSEE
-    commune_label        STRING,        -- Nom officiel
+    commune_bk           STRING,        -- Clé source si applicable
+    commune_code         STRING,        -- Code INSEE (universel)
+    commune_name         STRING,        -- Nom officiel
     
     job_insert_id        STRING,
     job_insert_date_utc  TIMESTAMP_NTZ,
-    job_modify_id        STRING,
-    job_modify_date_utc  TIMESTAMP_NTZ,
+    job_update_id        STRING,
+    job_update_date_utc  TIMESTAMP_NTZ,
+    
+    extras               VARIANT,
     
     PRIMARY KEY (commune_sk)
 );
@@ -243,62 +456,69 @@ CREATE TABLE fact_loyer_commune (
     -- Clé primaire
     loyer_commune_sk                STRING,
     
-    -- Clés étrangères (dimensions)
+    -- Clés étrangères (dimensions) - toujours _sk
     commune_sk                      STRING,
     epci_sk                         STRING,
     annee_sk                        STRING,
-    prediction_type_sk              STRING,
+    type_prediction_sk              STRING,
     
-    -- Faits (mesures)
-    loyer_predicted_m2              DECIMAL(10,2),
-    loyer_lower_bound_m2            DECIMAL(10,2),
-    loyer_upper_bound_m2            DECIMAL(10,2),
+    -- Faits (mesures) - français avec abréviations statistiques
+    loyer_m2                        DECIMAL(10,2),  -- Mesure principale
+    loyer_m2_min                    DECIMAL(10,2),  -- Borne inférieure
+    loyer_m2_max                    DECIMAL(10,2),  -- Borne supérieure
+    loyer_m2_moy                    DECIMAL(10,2),  -- Moyenne
     
-    -- Indicateurs de qualité
-    quality_r2_adjusted             DECIMAL(5,4),
-    count_observations_grid         INTEGER,
-    count_observations_commune      INTEGER,
+    -- Indicateurs de qualité - français
+    qualite_r2_ajuste               DECIMAL(5,4),
+    nb_observations_maille          INTEGER,
+    nb_observations_commune         INTEGER,
     
     -- Métadonnées obligatoires
     job_insert_id                   STRING,
     job_insert_date_utc             TIMESTAMP_NTZ,
-    job_modify_id                   STRING,
-    job_modify_date_utc             TIMESTAMP_NTZ,
+    job_update_id                   STRING,
+    job_update_date_utc             TIMESTAMP_NTZ,
+    
+    -- Champs semi-structurés
+    extras                          VARIANT,
     
     PRIMARY KEY (loyer_commune_sk),
     FOREIGN KEY (commune_sk) REFERENCES dim_commune(commune_sk),
     FOREIGN KEY (epci_sk) REFERENCES dim_epci(epci_sk),
-    FOREIGN KEY (prediction_type_sk) REFERENCES dim_prediction_type(prediction_type_sk)
+    FOREIGN KEY (type_prediction_sk) REFERENCES dim_type_prediction(type_prediction_sk)
 );
 
 -- Commentaires (en français)
 COMMENT ON TABLE fact_loyer_commune IS 
     'Table de faits contenant les loyers prédits par commune pour le 3ème trimestre 2018';
 
-COMMENT ON COLUMN fact_loyer_commune.loyer_predicted_m2 IS 
+COMMENT ON COLUMN fact_loyer_commune.loyer_m2 IS 
     'Loyer prévu (charges comprises) au mètre carré, estimé à partir des annonces en ligne';
 
-COMMENT ON COLUMN fact_loyer_commune.quality_r2_adjusted IS 
+COMMENT ON COLUMN fact_loyer_commune.qualite_r2_ajuste IS 
     'Coefficient de détermination ajusté (R² ajusté) mesurant la qualité du modèle prédictif';
 ```
 
 ### Table de Dimension : Types de Prédiction
 
 ```sql
-CREATE TABLE dim_prediction_type (
-    prediction_type_sk      STRING,
-    prediction_type_code    STRING,
-    prediction_type_label   STRING,
+CREATE TABLE dim_type_prediction (
+    type_prediction_sk      STRING,
+    type_prediction_bk      STRING,
+    type_prediction_code    STRING,
+    type_prediction_name    STRING,
     
     job_insert_id           STRING,
     job_insert_date_utc     TIMESTAMP_NTZ,
-    job_modify_id           STRING,
-    job_modify_date_utc     TIMESTAMP_NTZ,
+    job_update_id           STRING,
+    job_update_date_utc     TIMESTAMP_NTZ,
     
-    PRIMARY KEY (prediction_type_sk)
+    extras                  VARIANT,
+    
+    PRIMARY KEY (type_prediction_sk)
 );
 
-COMMENT ON TABLE dim_prediction_type IS 
+COMMENT ON TABLE dim_type_prediction IS 
     'Type de maille statistique utilisée pour la prédiction du loyer (commune, EPCI, grille)';
 ```
 
@@ -323,19 +543,28 @@ Lors de la migration d'une table avec anciens noms :
 | Concept | Français | Anglais | Dans les colonnes |
 |---------|----------|---------|-------------------|
 | **Entités du domaine** | | | |
-| Loyer | loyer | rent | `loyer_predicted_m2` ✅ |
-| Commune | commune | municipality | `commune_sk` ✅ |
-| EPCI | epci | intercommunality | `epci_sk` ✅ |
-| Logement | logement | housing | `logement_type_sk` ✅ |
+| Loyer | loyer | rent | `loyer_predit_m2` ✅ |
+| Commune | commune | municipality | `commune_sk`, `commune_code`, `commune_name` ✅ |
+| EPCI | epci | intercommunality | `epci_sk`, `epci_code` ✅ |
+| Logement | logement | housing | `logement_sk` ✅ |
 | Propriétaire | proprietaire | owner | `proprietaire_sk` ✅ |
-| **Opérations/Attributs** | | | |
-| Prédit | prédit | predicted | `predicted` ✅ |
-| Observé | observé | observed | `observed` ✅ |
-| Inférieur | inférieur | lower | `lower_bound` ✅ |
-| Supérieur | supérieur | upper | `upper_bound` ✅ |
-| Maille | maille | grid | `grid` ✅ |
-| Qualité | qualité | quality | `quality` ✅ |
-| Nombre | nombre | count | `count` ✅ (pas `nbr`) |
+| **Attributs métier** | | | |
+| Prédit | prédit | predicted | `predit` ✅ (français) |
+| Observé | observé | observed | `observe` ✅ (français) |
+| Inférieur | inférieur | lower | `inferieur` ✅ (français) |
+| Supérieur | supérieur | upper | `superieur` ✅ (français) |
+| Maille | maille | grid | `maille` ✅ (français) |
+| Qualité | qualité | quality | `qualite` ✅ (français) |
+| Nombre | nombre | count/number | `nombre` ✅ (français, pas `nbr`) |
+| **Suffixes techniques** | | | |
+| Clé substitution | - | surrogate key | `_sk` ✅ |
+| Clé métier source | - | business key | `_bk` ✅ |
+| Code universel | - | code | `_code` ✅ |
+| Libellé/nom | - | name/label | `_name` ✅ |
+| **Opérations** | | | |
+| Compter | - | count | `count_` ✅ (opération SQL) |
+| Sommer | - | sum | `sum_` ✅ (opération SQL) |
+| Moyenne | - | average | `avg_` ✅ (opération SQL) |
 
 ---
 

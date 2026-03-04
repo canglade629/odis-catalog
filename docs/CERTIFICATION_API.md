@@ -224,7 +224,7 @@ These endpoints now respect certification status:
 
 ### 500 Internal Server Error
 - Database connection issues
-- Firestore errors
+- PostgreSQL/database errors
 - Unexpected errors
 
 ---

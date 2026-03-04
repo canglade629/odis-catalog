@@ -7,9 +7,9 @@ echo "🔧 Starting Odace Data Pipeline in development mode"
 
 # Check if .env exists
 if [ ! -f .env ]; then
-    echo "⚠️  .env file not found. Creating from .env.example..."
-    cp .env.example .env
-    echo "📝 Please edit .env with your configuration"
+    echo "⚠️  .env file not found. Copy env.template to .env:"
+    echo "   cp env.template .env"
+    echo "📝 Then edit .env with Scaleway S3 and PostgreSQL settings"
     exit 1
 fi
 

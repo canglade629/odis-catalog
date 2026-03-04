@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin
 from app.core.models import FileUploadResponse
 from app.core.config import get_settings
-from app.utils.gcs_ops import get_gcs_operations
+from app.utils.s3_ops import get_s3_operations
 from app.core.rate_limiter import limiter
 from datetime import datetime
 
@@ -19,7 +19,7 @@ async def upload_file(
     admin_verified: bool = Depends(verify_admin_secret)
 ):
     """
-    Upload a file to the raw data folder in GCS.
+    Upload a file to the raw data folder in S3.
     
     **Requires admin authentication.**
     
@@ -32,14 +32,14 @@ async def upload_file(
         File upload response with destination path
     """
     settings = get_settings()
-    gcs = get_gcs_operations()
+    s3 = get_s3_operations()
     
     try:
-        # Construct destination path
+        # Construct destination path (S3)
         destination = f"{settings.get_raw_path(domain)}/{file.filename}"
         
         # Upload file
-        gcs.upload_file(file.file, destination)
+        s3.upload_file(file.file, destination)
         
         # Get file size
         file.file.seek(0, 2)  # Seek to end
@@ -74,15 +74,15 @@ async def list_files(
         List of files
     """
     settings = get_settings()
-    gcs = get_gcs_operations()
+    s3 = get_s3_operations()
     
     try:
         if domain:
-            prefix = settings.get_raw_path(domain).replace(f"gs://{settings.gcs_bucket}/", "")
+            prefix = settings.get_raw_path(domain)
         else:
-            prefix = settings.gcs_raw_prefix
+            prefix = settings.raw_path
         
-        files = gcs.list_files(prefix)
+        files = s3.list_files(prefix)
         
         return {
             "files": files,

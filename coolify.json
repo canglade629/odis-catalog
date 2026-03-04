@@ -1,0 +1,11 @@
+{
+  "name": "Odace Pipeline API",
+  "build": {
+    "build_pack": "dockerfile"
+  },
+  "network": {
+    "ports": {
+      "expose": "8080"
+    }
+  }
+}

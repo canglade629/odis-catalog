@@ -5,134 +5,116 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Odace Data Pipeline</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/static/style.css">
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- Mermaid.js for diagram rendering -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
-<body>
-    <div class="container">
-        <div class="api-key-section">
-            <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
-                <span id="userBadge" class="user-badge" style="display: none;">👥 User</span>
-                <span id="adminBadge" class="admin-badge" style="display: none;">👤 Admin</span>
+<body class="bg-neutral-50 text-neutral-800 font-sans antialiased leading-relaxed min-h-screen">
+    <div class="max-w-[1400px] mx-auto p-5">
+        <div class="api-key-section bg-white rounded-lg shadow-sm p-5 mb-8 flex items-center gap-4 flex-wrap">
+            <div class="flex items-center gap-4 flex-1">
+                <span id="userBadge" class="user-badge hidden px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-semibold">👥 User</span>
+                <span id="adminBadge" class="admin-badge hidden px-3 py-1.5 rounded bg-neutral-700 text-white text-sm font-semibold">👤 Admin</span>
             </div>
-            
-            <div id="viewModeToggle" style="display: none; margin-left: auto;">
-                <button onclick="toggleViewMode()" id="viewModeBtn" class="btn-small btn-secondary">
+            <div id="viewModeToggle" class="hidden ml-auto">
+                <button type="button" onclick="toggleViewMode()" id="viewModeBtn" class="btn-small btn-secondary px-3.5 py-1.5 text-sm rounded border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-100 hover:border-neutral-600 transition shadow-sm">
                     <span id="viewModeIcon">👥</span>
                     <span id="viewModeText">Switch to User View</span>
                 </button>
             </div>
-            
-            <button onclick="logout()" id="logoutBtn" style="display: none; margin-left: 10px;" class="btn-small btn-secondary">Logout</button>
+            <button type="button" onclick="logout()" id="logoutBtn" class="hidden ml-2.5 px-3.5 py-1.5 text-sm rounded border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-100 transition shadow-sm">Logout</button>
         </div>
 
-        <nav class="tabs">
-            <button class="tab-button active" onclick="showTab('catalogue')">Catalogue</button>
-            <button class="tab-button" onclick="showTab('pipelines')" data-admin-only="true">Pipelines</button>
-            <button class="tab-button" onclick="showTab('history')" data-admin-only="true">History</button>
-            <button class="tab-button" onclick="showTab('logs')" data-admin-only="true">Logs</button>
-            <button class="tab-button" onclick="showTab('files')" data-admin-only="true">Files</button>
-            <button class="tab-button" onclick="showTab('data')" data-admin-only="true">Data</button>
-            <button class="tab-button" onclick="showTab('sql')" data-admin-only="true">SQL Query</button>
+        <nav class="tabs flex gap-2.5 mb-8 bg-white p-2.5 rounded-lg shadow-sm hidden">
+            <button type="button" class="tab-button active px-6 py-3 rounded font-medium text-[0.95rem] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition" onclick="showTab('catalogue')">Catalogue</button>
+            <button type="button" class="tab-button px-6 py-3 rounded font-medium text-[0.95rem] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition" onclick="showTab('pipelines')" data-admin-only="true">Pipelines</button>
+            <button type="button" class="tab-button px-6 py-3 rounded font-medium text-[0.95rem] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition" onclick="showTab('history')" data-admin-only="true">History</button>
+            <button type="button" class="tab-button px-6 py-3 rounded font-medium text-[0.95rem] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition" onclick="showTab('logs')" data-admin-only="true">Logs</button>
+            <button type="button" class="tab-button px-6 py-3 rounded font-medium text-[0.95rem] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition" onclick="showTab('files')" data-admin-only="true">Files</button>
+            <button type="button" class="tab-button px-6 py-3 rounded font-medium text-[0.95rem] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition" onclick="showTab('data')" data-admin-only="true">Data</button>
+            <button type="button" class="tab-button px-6 py-3 rounded font-medium text-[0.95rem] text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 transition" onclick="showTab('sql')" data-admin-only="true">SQL Query</button>
         </nav>
 
         <div id="catalogue" class="tab-content active">
-            <div class="catalog-header">
-                <h2>Catalogue de la plateforme Odace</h2>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input 
-                        type="text" 
-                        id="catalog-search" 
-                        placeholder="Rechercher une table..." 
-                        onkeyup="filterCatalog()"
-                        style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; min-width: 250px;"
-                    />
-                    <button onclick="refreshSilverCatalog()" class="btn-icon" title="Synchroniser le catalogue (Admin uniquement)">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                        </svg>
+            <div class="catalog-header flex items-center justify-between mb-5">
+                <h2 class="text-2xl font-semibold text-neutral-800 m-0">Catalogue de la plateforme Odace</h2>
+                <div class="flex gap-2.5 items-center">
+                    <input type="text" id="catalog-search" placeholder="Rechercher une table..." onkeyup="filterCatalog()"
+                        class="px-3 py-2 border border-neutral-300 rounded min-w-[250px] bg-neutral-50 text-neutral-800 focus:outline-none focus:border-neutral-700 focus:bg-white" />
+                    <button type="button" onclick="refreshSilverCatalog()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 hover:border-neutral-600 hover:text-neutral-700 transition flex items-center justify-center" title="Synchroniser le catalogue (Admin uniquement)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
                     </button>
                 </div>
             </div>
-            
-            <div id="silver-catalog-grid" class="pipeline-grid">
-                <p class="info-text">Chargement du catalogue...</p>
+            <div id="silver-catalog-grid" class="pipeline-grid grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5 mt-4">
+                <p class="info-text text-neutral-500 italic py-5 text-center col-span-full">Chargement du catalogue...</p>
             </div>
         </div>
 
         <div id="pipelines" class="tab-content">
-            <h2>Run Pipelines</h2>
-            
-            <div class="pipeline-section">
-                <h3>Full Pipeline</h3>
-                <button onclick="runFullPipeline()" class="btn btn-primary">Run Full Pipeline (Bronze → Silver)</button>
-                <button onclick="runFullPipeline(true, false)" class="btn btn-secondary">Run Bronze Only</button>
-                <button onclick="runFullPipeline(false, true)" class="btn btn-secondary">Run Silver Only</button>
+            <h2 class="text-2xl font-semibold text-neutral-800 mb-6">Run Pipelines</h2>
+            <div class="pipeline-section bg-white rounded-lg shadow-sm p-6 mb-6">
+                <h3 class="text-lg font-semibold text-neutral-800 mb-4 pb-2.5 border-b-2 border-neutral-200">Full Pipeline</h3>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" onclick="runFullPipeline()" class="btn btn-primary px-5 py-2.5 rounded bg-neutral-700 text-white font-medium shadow-sm hover:bg-neutral-600 hover:shadow transition">Run Full Pipeline (Bronze → Silver)</button>
+                    <button type="button" onclick="runFullPipeline(true, false)" class="btn btn-secondary px-5 py-2.5 rounded border border-neutral-300 bg-white text-neutral-800 font-medium hover:bg-neutral-100 hover:border-neutral-600 transition shadow-sm">Run Bronze Only</button>
+                    <button type="button" onclick="runFullPipeline(false, true)" class="btn btn-secondary px-5 py-2.5 rounded border border-neutral-300 bg-white text-neutral-800 font-medium hover:bg-neutral-100 hover:border-neutral-600 transition shadow-sm">Run Silver Only</button>
+                </div>
             </div>
-
-            <div class="pipeline-section">
-                <h3>Bronze Layer</h3>
-                <div id="bronze-pipelines" class="pipeline-grid"></div>
+            <div class="pipeline-section bg-white rounded-lg shadow-sm p-6 mb-6">
+                <h3 class="text-lg font-semibold text-neutral-800 mb-4 pb-2.5 border-b-2 border-neutral-200">Bronze Layer</h3>
+                <div id="bronze-pipelines" class="pipeline-grid grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5 mt-4"></div>
             </div>
-
-            <div class="pipeline-section">
-                <h3>Silver Layer</h3>
-                <div id="silver-pipelines" class="pipeline-grid"></div>
+            <div class="pipeline-section bg-white rounded-lg shadow-sm p-6 mb-6">
+                <h3 class="text-lg font-semibold text-neutral-800 mb-4 pb-2.5 border-b-2 border-neutral-200">Silver Layer</h3>
+                <div id="silver-pipelines" class="pipeline-grid grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5 mt-4"></div>
             </div>
-
-            <div class="pipeline-section">
-                <h3>Gold Layer</h3>
-                <div id="gold-pipelines" class="pipeline-grid">
-                    <p class="info-text">Gold layer pipelines not yet implemented. Add as needed.</p>
+            <div class="pipeline-section bg-white rounded-lg shadow-sm p-6 mb-6">
+                <h3 class="text-lg font-semibold text-neutral-800 mb-4 pb-2.5 border-b-2 border-neutral-200">Gold Layer</h3>
+                <div id="gold-pipelines" class="pipeline-grid grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5 mt-4">
+                    <p class="info-text text-neutral-500 italic py-5 text-center col-span-full">Gold layer pipelines not yet implemented. Add as needed.</p>
                 </div>
             </div>
         </div>
 
         <div id="history" class="tab-content">
-            <div class="catalog-header">
-                <h2>Job History</h2>
-                <button onclick="loadJobHistory()" class="btn-icon" title="Refresh job history">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                    </svg>
+            <div class="catalog-header flex items-center justify-between mb-5">
+                <h2 class="text-2xl font-semibold text-neutral-800 m-0">Job History</h2>
+                <button type="button" onclick="loadJobHistory()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 transition flex items-center justify-center" title="Refresh job history">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
                 </button>
             </div>
-            <div id="job-history-list"></div>
+            <div id="job-history-list" class="min-h-[100px] flex flex-col gap-4"></div>
         </div>
 
         <div id="logs" class="tab-content">
-            <div class="logs-header">
-                <h2>Pipeline Logs</h2>
-                <div class="logs-actions">
-                    <button onclick="toggleAutoRefresh()" id="autoRefreshBtn" class="btn btn-small btn-secondary">
-                        <span id="autoRefreshIcon">▶</span> Auto-refresh
-                    </button>
-                    <button onclick="clearLogsDisplay()" class="btn btn-small btn-secondary">Clear</button>
-                    <button onclick="loadAllLogs()" class="btn-icon" title="Refresh logs">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                        </svg>
+            <div class="logs-header bg-white rounded-lg shadow-sm p-6 mb-5">
+                <h2 class="text-2xl font-semibold text-neutral-800 m-0 mb-4">Pipeline Logs</h2>
+                <div class="logs-actions flex gap-4 items-center flex-wrap ml-auto">
+                    <button type="button" onclick="toggleAutoRefresh()" id="autoRefreshBtn" class="btn btn-small btn-secondary px-3.5 py-1.5 text-sm rounded border border-neutral-300 bg-white text-neutral-800 font-medium hover:bg-neutral-100 transition shadow-sm"><span id="autoRefreshIcon">▶</span> Auto-refresh</button>
+                    <button type="button" onclick="clearLogsDisplay()" class="btn btn-small btn-secondary px-3.5 py-1.5 text-sm rounded border border-neutral-300 bg-white text-neutral-800 font-medium hover:bg-neutral-100 transition shadow-sm">Clear</button>
+                    <button type="button" onclick="loadAllLogs()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 transition flex items-center justify-center" title="Refresh logs">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
                     </button>
                 </div>
             </div>
-            <div class="terminal-container">
-                <div id="terminal-output" class="terminal-output">
-                    <div class="terminal-prompt">Loading logs...</div>
+            <div class="terminal-container bg-[#1e1e1e] rounded-lg shadow-md overflow-hidden border border-neutral-700">
+                <div id="terminal-output" class="terminal-output bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[0.9rem] leading-relaxed p-5 min-h-[500px] max-h-[70vh] overflow-y-auto overflow-x-auto whitespace-pre-wrap break-words">
+                    <div class="terminal-prompt text-neutral-500 italic text-center py-10 px-5">Loading logs...</div>
                 </div>
             </div>
         </div>
 
         <div id="files" class="tab-content">
-            <h2>File Management</h2>
-            
-            <div class="file-section">
-                <h3>Upload File</h3>
-                <div class="upload-form">
-                    <label for="domain">Domain:</label>
-                    <select id="domain">
+            <h2 class="text-2xl font-semibold text-neutral-800 mb-6">File Management</h2>
+            <div class="file-section bg-white rounded-lg shadow-sm p-6 mb-6">
+                <h3 class="text-lg font-semibold text-neutral-800 mb-4 pb-2.5 border-b-2 border-neutral-200">Upload File</h3>
+                <div class="upload-form flex gap-4 items-center flex-wrap mt-4">
+                    <label for="domain" class="font-medium text-neutral-800">Domain:</label>
+                    <select id="domain" class="px-4 py-2.5 border border-neutral-300 rounded bg-neutral-50 text-neutral-800 focus:outline-none focus:border-neutral-700 text-[0.95rem]">
                         <option value="accueillants">accueillants</option>
                         <option value="geo">geo</option>
                         <option value="logement">logement</option>
@@ -140,101 +122,86 @@
                         <option value="transport/lignes">transport/lignes</option>
                         <option value="zones_attraction">zones_attraction</option>
                     </select>
-                    <input type="file" id="fileInput" />
-                    <button onclick="uploadFile()" class="btn btn-primary">Upload</button>
+                    <input type="file" id="fileInput" class="px-4 py-2.5 border border-neutral-300 rounded bg-neutral-50 text-neutral-800 text-[0.95rem]" />
+                    <button type="button" onclick="uploadFile()" class="btn btn-primary px-5 py-2.5 rounded bg-neutral-700 text-white font-medium shadow-sm hover:bg-neutral-600 transition">Upload</button>
                 </div>
             </div>
-
-            <div class="file-section">
-                <div class="catalog-header">
-                    <h3>List Files</h3>
-                    <button onclick="listFiles()" class="btn-icon" title="Refresh file list">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                        </svg>
+            <div class="file-section bg-white rounded-lg shadow-sm p-6 mb-6">
+                <div class="catalog-header flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-neutral-800 m-0">List Files</h3>
+                    <button type="button" onclick="listFiles()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 transition flex items-center justify-center" title="Refresh file list">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
                     </button>
                 </div>
-                <div id="file-list"></div>
+                <div id="file-list" class="mt-4 list-none"></div>
             </div>
         </div>
 
         <div id="data" class="tab-content">
-            <div class="catalog-header">
-                <h2>Data Catalog</h2>
-                <button onclick="loadCatalog()" class="btn-icon" title="Refresh catalog">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                    </svg>
+            <div class="catalog-header flex items-center justify-between mb-5">
+                <h2 class="text-2xl font-semibold text-neutral-800 m-0">Data Catalog</h2>
+                <button type="button" onclick="loadCatalog()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 transition flex items-center justify-center" title="Refresh catalog">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
                 </button>
             </div>
-            
-            <div class="data-catalog-container">
-                <div class="catalog-tree">
-                    <h3>Tables</h3>
-                    <div id="catalog-tree-content" class="tree-content">
-                        <p class="info-text">Loading catalog...</p>
+            <div class="data-catalog-container grid grid-cols-[280px_1fr_280px] gap-4 min-h-[600px]">
+                <div class="catalog-tree bg-white rounded-lg shadow-sm p-5 border border-neutral-200 overflow-y-auto max-h-[800px]">
+                    <h3 class="text-[1.1rem] font-semibold text-neutral-800 mb-4 pb-2.5 border-b-2 border-neutral-200">Tables</h3>
+                    <div id="catalog-tree-content" class="tree-content flex flex-col gap-2.5">
+                        <p class="info-text text-neutral-500 italic py-5 text-center">Loading catalog...</p>
                     </div>
                 </div>
-                
-                <div class="catalog-detail">
-                    <div id="table-info" class="table-info-section">
-                        <p class="info-text">Select a table to view details</p>
+                <div class="catalog-detail bg-white rounded-lg shadow-sm p-6 border border-neutral-200 overflow-y-auto max-h-[800px]">
+                    <div id="table-info" class="table-info-section flex flex-col gap-6">
+                        <p class="info-text text-neutral-500 italic py-5 text-center">Select a table to view details</p>
                     </div>
                 </div>
-                
-                <div class="catalog-controls">
-                    <div id="table-controls" class="table-controls-section">
-                        <p class="info-text">Select a table to view controls</p>
+                <div class="catalog-controls bg-white rounded-lg shadow-sm p-5 border border-neutral-200 overflow-y-auto max-h-[800px]">
+                    <div id="table-controls" class="table-controls-section flex flex-col gap-5">
+                        <p class="info-text text-neutral-500 italic py-5 text-center">Select a table to view controls</p>
                     </div>
                 </div>
             </div>
         </div>
 
         <div id="sql" class="tab-content">
-            <div class="catalog-header">
-                <h2>SQL Query</h2>
-                <button onclick="loadSQLQueryTab()" class="btn-icon" title="Refresh tables">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                    </svg>
+            <div class="catalog-header flex items-center justify-between mb-5">
+                <h2 class="text-2xl font-semibold text-neutral-800 m-0">SQL Query</h2>
+                <button type="button" onclick="loadSQLQueryTab()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 transition flex items-center justify-center" title="Refresh tables">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
                 </button>
             </div>
-            
-            <div class="sql-query-container">
-                <div class="catalog-tree">
-                    <h3>Tables</h3>
-                    <div id="sql-catalog-tree-content" class="tree-content">
-                        <p class="info-text">Loading catalog...</p>
+            <div class="sql-query-container grid grid-cols-[280px_1fr] gap-4 min-h-[600px]">
+                <div class="catalog-tree bg-white rounded-lg shadow-sm p-5 border border-neutral-200 overflow-y-auto">
+                    <h3 class="text-[1.1rem] font-semibold text-neutral-800 mb-4 pb-2.5 border-b-2 border-neutral-200">Tables</h3>
+                    <div id="sql-catalog-tree-content" class="tree-content flex flex-col gap-2.5">
+                        <p class="info-text text-neutral-500 italic py-5 text-center">Loading catalog...</p>
                     </div>
                 </div>
-                
-                <div class="sql-main-panel">
-                    <div class="sql-editor-panel">
-                        <div class="sql-editor-header">
-                            <h3>SQL Editor</h3>
-                            <div class="sql-editor-actions">
-                                <button onclick="clearSQLEditor()" class="btn btn-small btn-secondary">Clear</button>
-                                <button onclick="runSQLQuery()" class="btn btn-small btn-primary sql-run-button">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
-                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                    </svg>
+                <div class="sql-main-panel flex flex-col gap-4">
+                    <div class="sql-editor-panel bg-white rounded-lg shadow-sm p-5 border border-neutral-200 flex flex-col gap-3">
+                        <div class="sql-editor-header flex justify-between items-center pb-2.5 border-b-2 border-neutral-200">
+                            <h3 class="text-[1.1rem] font-semibold text-neutral-800 m-0">SQL Editor</h3>
+                            <div class="sql-editor-actions flex gap-2.5 items-center">
+                                <button type="button" onclick="clearSQLEditor()" class="btn btn-small btn-secondary px-3.5 py-1.5 text-sm rounded border border-neutral-300 bg-white font-medium hover:bg-neutral-100 transition shadow-sm">Clear</button>
+                                <button type="button" onclick="runSQLQuery()" class="btn btn-small btn-primary sql-run-button px-3.5 py-1.5 text-sm rounded bg-neutral-700 text-white font-medium shadow-sm hover:bg-neutral-600 transition flex items-center justify-center">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                                     Run Query
                                 </button>
                             </div>
                         </div>
-                        <textarea id="sql-editor" class="sql-editor" placeholder="Enter SQL query here...&#10;&#10;Example:&#10;SELECT * FROM bronze_accueillants LIMIT 10;&#10;&#10;Tables are referenced as: layer_table_name&#10;  - bronze_accueillants&#10;  - silver_geo&#10;  - etc.&#10;&#10;Press Ctrl+Enter to run"></textarea>
-                        <div class="sql-editor-footer">
-                            <span id="sql-query-info" class="sql-query-info"></span>
+                        <textarea id="sql-editor" class="sql-editor w-full min-h-[200px] p-4 border border-neutral-300 rounded font-mono text-[0.9rem] leading-relaxed bg-neutral-50 text-neutral-800 resize-y focus:outline-none focus:border-neutral-700 focus:bg-white tab-size-4" placeholder="Enter SQL query here...&#10;&#10;Example:&#10;SELECT * FROM bronze_accueillants LIMIT 10;&#10;&#10;Tables are referenced as: layer_table_name&#10;  - bronze_accueillants&#10;  - silver_geo&#10;  - etc.&#10;&#10;Press Ctrl+Enter to run"></textarea>
+                        <div class="sql-editor-footer flex justify-between items-center text-[0.85rem] text-neutral-500 pt-1">
+                            <span id="sql-query-info" class="sql-query-info italic"></span>
                         </div>
                     </div>
-                    
-                    <div class="sql-results-panel">
-                        <div class="sql-results-header">
-                            <h3>Results</h3>
-                            <span id="sql-results-info" class="sql-results-info"></span>
+                    <div class="sql-results-panel bg-white rounded-lg shadow-sm p-5 border border-neutral-200 flex flex-col gap-3 min-h-[300px] max-h-[600px]">
+                        <div class="sql-results-header flex justify-between items-center pb-2.5 border-b-2 border-neutral-200">
+                            <h3 class="text-[1.1rem] font-semibold text-neutral-800 m-0">Results</h3>
+                            <span id="sql-results-info" class="sql-results-info text-[0.9rem] text-neutral-500 font-medium"></span>
                         </div>
-                        <div id="sql-results-content" class="sql-results-content">
-                            <p class="info-text">Run a query to see results</p>
+                        <div id="sql-results-content" class="sql-results-content flex-1 overflow-auto">
+                            <p class="info-text text-neutral-500 italic py-5 text-center">Run a query to see results</p>
                         </div>
                     </div>
                 </div>
@@ -242,80 +209,75 @@
         </div>
 
         <div id="doc" class="tab-content">
-            <div class="catalog-header">
-                <h2>Data Model Documentation</h2>
-                <button onclick="loadDocumentation()" class="btn-icon" title="Refresh documentation">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                    </svg>
+            <div class="catalog-header flex items-center justify-between mb-5">
+                <h2 class="text-2xl font-semibold text-neutral-800 m-0">Data Model Documentation</h2>
+                <button type="button" onclick="loadDocumentation()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 transition flex items-center justify-center" title="Refresh documentation">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
                 </button>
             </div>
-            
-            <div id="doc-content" class="doc-content">
-                <p class="info-text">Loading documentation...</p>
+            <div id="doc-content" class="doc-content bg-white rounded-lg shadow-sm p-10 max-w-[1200px] mx-auto leading-relaxed">
+                <p class="info-text text-neutral-500 italic py-5 text-center">Loading documentation...</p>
             </div>
         </div>
 
-        <div id="status" class="status-message"></div>
+        <div id="status" class="status-message fixed top-5 right-5 py-4 px-6 rounded-lg shadow-lg font-medium z-[1000] max-w-[400px] hidden"></div>
     </div>
 
     <!-- Job Details Modal -->
-    <div id="job-modal" class="modal-overlay" onclick="closeJobModal()">
-        <div class="modal-container" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <h3 id="modal-job-title">Job Details</h3>
-                <button class="modal-close-btn" onclick="closeJobModal()">&times;</button>
+    <div id="job-modal" class="modal-overlay fixed inset-0 bg-black/50 z-[2000] items-center justify-center hidden" onclick="closeJobModal()">
+        <div class="modal-container bg-white rounded-lg shadow-lg max-w-[1000px] max-h-[80vh] w-[90%] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+            <div class="modal-header flex justify-between items-center py-5 px-6 border-b-2 border-neutral-200 bg-neutral-100">
+                <h3 id="modal-job-title" class="text-xl font-semibold text-neutral-800 m-0">Job Details</h3>
+                <button type="button" class="modal-close-btn w-8 h-8 flex items-center justify-center rounded text-2xl text-neutral-500 hover:bg-white hover:text-neutral-800 transition bg-transparent border-0 cursor-pointer leading-none p-0" onclick="closeJobModal()">&times;</button>
             </div>
-            <div class="modal-body" id="modal-body">
-                <div class="loading-tasks">Loading tasks...</div>
+            <div class="modal-body p-6 overflow-y-auto flex-1" id="modal-body">
+                <div class="loading-tasks text-center text-neutral-500 py-10 px-5 italic">Loading tasks...</div>
             </div>
         </div>
     </div>
 
     <!-- Catalog Table Details Modal -->
-    <div id="catalog-modal" class="modal-overlay" onclick="closeCatalogModal()">
-        <div class="modal-container modal-large" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <h3 id="catalog-modal-title">Détails de la Table</h3>
-                <button class="modal-close-btn" onclick="closeCatalogModal()">&times;</button>
+    <div id="catalog-modal" class="modal-overlay fixed inset-0 bg-black/50 z-[2000] items-center justify-center hidden" onclick="closeCatalogModal()">
+        <div class="modal-container modal-large bg-white rounded-lg shadow-lg max-w-[1200px] max-h-[85vh] w-[90%] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+            <div class="modal-header flex justify-between items-center py-5 px-6 border-b-2 border-neutral-200 bg-neutral-100">
+                <h3 id="catalog-modal-title" class="text-xl font-semibold text-neutral-800 m-0">Détails de la Table</h3>
+                <button type="button" class="modal-close-btn w-8 h-8 flex items-center justify-center rounded text-2xl text-neutral-500 hover:bg-white hover:text-neutral-800 transition bg-transparent border-0 cursor-pointer leading-none p-0" onclick="closeCatalogModal()">&times;</button>
             </div>
-            <div class="modal-body" id="catalog-modal-body">
-            </div>
+            <div class="modal-body p-6 overflow-y-auto flex-1" id="catalog-modal-body"></div>
         </div>
     </div>
 
     <!-- Confirmation Modal -->
-    <div id="confirm-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-container" onclick="event.stopPropagation()" style="max-width: 500px;">
-            <div class="modal-header">
-                <h3 id="confirm-modal-title">Confirmation</h3>
-                <button class="modal-close-btn" onclick="closeConfirmModal()">&times;</button>
+    <div id="confirm-modal" class="modal-overlay fixed inset-0 bg-black/50 z-[2000] items-center justify-center hidden" style="display: none;">
+        <div class="modal-container bg-white rounded-lg shadow-lg max-w-[500px] w-[90%] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+            <div class="modal-header flex justify-between items-center py-5 px-6 border-b-2 border-neutral-200 bg-neutral-100">
+                <h3 id="confirm-modal-title" class="text-xl font-semibold text-neutral-800 m-0">Confirmation</h3>
+                <button type="button" class="modal-close-btn w-8 h-8 flex items-center justify-center rounded text-2xl text-neutral-500 hover:bg-white hover:text-neutral-800 transition bg-transparent border-0 cursor-pointer leading-none p-0" onclick="closeConfirmModal()">&times;</button>
             </div>
-            <div class="modal-body">
-                <p id="confirm-modal-message" style="margin: 20px 0; font-size: 16px; line-height: 1.5; white-space: pre-wrap;"></p>
-                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 30px;">
-                    <button class="btn btn-secondary" onclick="closeConfirmModal()">Annuler</button>
-                    <button class="btn btn-danger" id="confirm-modal-action" onclick="confirmModalAction()">Confirmer</button>
+            <div class="modal-body p-6">
+                <p id="confirm-modal-message" class="my-5 text-base leading-relaxed whitespace-pre-wrap"></p>
+                <div class="flex gap-2.5 justify-end mt-8">
+                    <button type="button" class="btn btn-secondary px-5 py-2.5 rounded border border-neutral-300 bg-white font-medium hover:bg-neutral-100 transition" onclick="closeConfirmModal()">Annuler</button>
+                    <button type="button" class="btn btn-danger px-5 py-2.5 rounded bg-red-600 text-white font-medium hover:bg-red-700 transition shadow-sm" id="confirm-modal-action" onclick="confirmModalAction()">Confirmer</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- API Key Prompt Modal -->
-    <div id="api-key-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-container" onclick="event.stopPropagation()" style="max-width: 500px;">
-            <div class="modal-header">
-                <h3>Welcome to Odace Data Pipeline</h3>
+    <div id="api-key-modal" class="modal-overlay fixed inset-0 bg-black/50 z-[2000] items-center justify-center hidden" style="display: none;">
+        <div class="modal-container bg-white rounded-lg shadow-lg max-w-[500px] w-[90%] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+            <div class="modal-header flex justify-between items-center py-5 px-6 border-b-2 border-neutral-200 bg-neutral-100">
+                <h3 class="text-xl font-semibold text-neutral-800 m-0">Welcome to Odace Data Pipeline</h3>
             </div>
-            <div class="modal-body">
-                <p style="margin-bottom: 20px;">Please enter your API key to continue:</p>
-                <input type="password" id="apiKeyPromptInput" placeholder="Enter your API key" 
-                       style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 15px;"
-                       onkeypress="if(event.key==='Enter') validateAndSetApiKey()" />
-                <div style="display: flex; justify-content: flex-end;">
-                    <button onclick="validateAndSetApiKey()" class="btn btn-primary">Continue</button>
+            <div class="modal-body p-6">
+                <p class="mb-5">Please enter your API key to continue:</p>
+                <input type="password" id="apiKeyPromptInput" placeholder="Enter your API key" class="w-full p-2.5 border border-neutral-300 rounded mb-4 text-neutral-800 focus:outline-none focus:border-neutral-700"
+                    onkeypress="if(event.key==='Enter') validateAndSetApiKey()" />
+                <div class="flex justify-end">
+                    <button type="button" onclick="validateAndSetApiKey()" class="btn btn-primary px-5 py-2.5 rounded bg-neutral-700 text-white font-medium hover:bg-neutral-600 transition">Continue</button>
                 </div>
-                <div id="apiKeyError" style="color: var(--error); margin-top: 10px; display: none;"></div>
+                <div id="apiKeyError" class="text-red-600 mt-2.5 hidden"></div>
             </div>
         </div>
     </div>
@@ -426,26 +388,28 @@
         }
 
         function showAdminUI() {
-            document.getElementById('adminBadge').style.display = 'inline-block';
-            document.getElementById('userBadge').style.display = 'none';
-            document.getElementById('viewModeToggle').style.display = 'flex';
-            document.getElementById('logoutBtn').style.display = 'inline-block';
-            
-            // Show tab navigation for admins
-            document.querySelector('.tabs').style.display = 'flex';
-            
+            document.getElementById('adminBadge').classList.remove('hidden');
+            document.getElementById('adminBadge').classList.add('inline-block');
+            document.getElementById('userBadge').classList.add('hidden');
+            document.getElementById('userBadge').classList.remove('inline-block');
+            document.getElementById('viewModeToggle').classList.remove('hidden');
+            document.getElementById('viewModeToggle').classList.add('flex');
+            document.getElementById('logoutBtn').classList.remove('hidden');
+            document.getElementById('logoutBtn').classList.add('inline-block');
+            document.querySelector('.tabs').classList.remove('hidden');
+            document.querySelector('.tabs').classList.add('flex');
             updateTabVisibility();
             updateViewModeButton();
         }
 
         function showUserUI() {
-            document.getElementById('adminBadge').style.display = 'none';
-            document.getElementById('userBadge').style.display = 'inline-block';
-            document.getElementById('viewModeToggle').style.display = 'none';
-            document.getElementById('logoutBtn').style.display = 'inline-block';
-            
-            // Hide tab navigation for users (only Catalogue available)
-            document.querySelector('.tabs').style.display = 'none';
+            document.getElementById('adminBadge').classList.add('hidden');
+            document.getElementById('userBadge').classList.remove('hidden');
+            document.getElementById('userBadge').classList.add('inline-block');
+            document.getElementById('viewModeToggle').classList.add('hidden');
+            document.getElementById('logoutBtn').classList.remove('hidden');
+            document.getElementById('logoutBtn').classList.add('inline-block');
+            document.querySelector('.tabs').classList.add('hidden');
             
             updateTabVisibility();
         }
@@ -458,15 +422,17 @@
             
             // Update badges and UI based on view mode
             if (isAdminViewMode) {
-                // Show admin experience
-                document.getElementById('adminBadge').style.display = 'inline-block';
-                document.getElementById('userBadge').style.display = 'none';
-                document.querySelector('.tabs').style.display = 'flex';
+                document.getElementById('adminBadge').classList.remove('hidden');
+                document.getElementById('adminBadge').classList.add('inline-block');
+                document.getElementById('userBadge').classList.add('hidden');
+                document.getElementById('userBadge').classList.remove('inline-block');
+                document.querySelector('.tabs').classList.remove('hidden');
+                document.querySelector('.tabs').classList.add('flex');
             } else {
-                // Show user experience (even though they're admin)
-                document.getElementById('adminBadge').style.display = 'none';
-                document.getElementById('userBadge').style.display = 'inline-block';
-                document.querySelector('.tabs').style.display = 'none';
+                document.getElementById('adminBadge').classList.add('hidden');
+                document.getElementById('userBadge').classList.remove('hidden');
+                document.getElementById('userBadge').classList.add('inline-block');
+                document.querySelector('.tabs').classList.add('hidden');
             }
             
             updateTabVisibility();
@@ -508,9 +474,11 @@
             
             adminTabs.forEach(tab => {
                 if (shouldShow) {
-                    tab.style.display = 'inline-block';
+                    tab.classList.remove('hidden');
+                    tab.classList.add('inline-block');
                 } else {
-                    tab.style.display = 'none';
+                    tab.classList.add('hidden');
+                    tab.classList.remove('inline-block');
                 }
             });
         }
@@ -523,10 +491,10 @@
             adminSecret = '';
             isAdmin = false;
             isAdminViewMode = true;
-            document.getElementById('adminBadge').style.display = 'none';
-            document.getElementById('userBadge').style.display = 'none';
-            document.getElementById('viewModeToggle').style.display = 'none';
-            document.getElementById('logoutBtn').style.display = 'none';
+            document.getElementById('adminBadge').classList.add('hidden');
+            document.getElementById('userBadge').classList.add('hidden');
+            document.getElementById('viewModeToggle').classList.add('hidden');
+            document.getElementById('logoutBtn').classList.add('hidden');
             showStatus('Logged out', 'info');
             showApiKeyPrompt();
         }
@@ -2019,9 +1987,9 @@
             // Certification badge (compact)
             let certBadgeHtml = '';
             if (tableData.certified) {
-                certBadgeHtml = '<span class="cert-badge cert-badge-certified" style="margin-left: 10px;">✓ Certifiée</span>';
+                certBadgeHtml = '<span class="cert-badge cert-badge-certified">✓ Certifiée</span>';
             } else {
-                certBadgeHtml = '<span class="cert-badge cert-badge-uncertified" style="margin-left: 10px;">⚠ Non certifiée</span>';
+                certBadgeHtml = '<span class="cert-badge cert-badge-uncertified">⚠ Non certifiée</span>';
             }
             
             // Dependencies section
@@ -2102,13 +2070,30 @@
                 `;
             }
             
+            // Certification action button (admin only)
+            let certActionHtml = '';
+            if (typeof isAdmin !== 'undefined' && isAdmin && typeof isAdminViewMode !== 'undefined' && isAdminViewMode) {
+                if (tableData.certified) {
+                    certActionHtml = `
+                        <button type="button" class="btn btn-small btn-secondary cert-button" onclick="uncertifyTable('${tableData.name}', event)">
+                            Retirer la certification
+                        </button>`;
+                } else {
+                    certActionHtml = `
+                        <button type="button" class="btn btn-small btn-primary cert-button" onclick="certifyTable('${tableData.name}', event)">
+                            Certifier cette table
+                        </button>`;
+                }
+            }
+            
             const html = `
                 <div class="table-detail-header">
-                    <div style="display: flex; align-items: center;">
-                        <h3 style="margin: 0;">${tableData.name}</h3>
+                    <div class="table-detail-header-row">
+                        <h3>${tableData.name}</h3>
                         ${certBadgeHtml}
                     </div>
                     <p class="table-description-fr">${tableData.description_fr}</p>
+                    ${certActionHtml ? `<div class="table-detail-actions">${certActionHtml}</div>` : ''}
                 </div>
                 ${dependenciesHtml}
                 ${schemaHtml}
