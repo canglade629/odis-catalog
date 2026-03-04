@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 import numpy as np
 
@@ -214,6 +214,7 @@ class CatalogueRefreshResponse(BaseModel):
 
 class SilverTableDetail(BaseModel):
     """Detailed information about a silver table."""
+    model_config = ConfigDict(populate_by_name=True)
     name: str
     description_fr: str
     dependencies: List[str]
