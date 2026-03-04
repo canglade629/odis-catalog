@@ -2,6 +2,7 @@
 # Usage: docker compose up --build
 # Ensure .env has SCW_*, PG_* (or DATABASE_URL), ADMIN_SECRET.
 # Publish 8080:8080 so Coolify (and local) can reach the app on 8080.
+# Traefik label ensures Coolify's proxy forwards to port 8080.
 
 services:
   app:
@@ -10,6 +11,8 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    labels:
+      - "traefik.http.services.app.loadbalancer.server.port=8080"
     # Optional: pass env explicitly instead of file
     # environment:
     #   - SCW_OBJECT_STORAGE_ENDPOINT=${SCW_OBJECT_STORAGE_ENDPOINT}

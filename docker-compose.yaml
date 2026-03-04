@@ -1,5 +1,6 @@
 # Same as docker-compose.yml. Coolify uses docker-compose.yaml by default.
 # Publish 8080:8080 so the proxy can reach the app.
+# Traefik port label ensures Coolify's proxy forwards to container port 8080.
 
 services:
   app:
@@ -8,3 +9,5 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    labels:
+      - "traefik.http.services.app.loadbalancer.server.port=8080"
