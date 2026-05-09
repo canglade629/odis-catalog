@@ -1826,7 +1826,7 @@
                 const gridDiv = document.getElementById('silver-catalog-grid');
                 gridDiv.innerHTML = '<p class="info-text">Chargement du catalogue...</p>';
                 
-                showStatus('Synchronisation du catalogue depuis le fichier YAML...', 'info');
+                showStatus('Actualisation du catalogue depuis PostgreSQL…', 'info');
                 
                 const refreshResponse = await fetch(`${API_BASE}/api/data/catalog/refresh`, {
                     method: 'POST',
@@ -2070,14 +2070,17 @@
                 certBadgeHtml = '<span class="cert-badge cert-badge-uncertified">⚠ Non certifiée</span>';
             }
             
-            // Dependencies section
+            // Dependencies / lineage section
             let dependenciesHtml = '';
-            if (tableData.dependencies && tableData.dependencies.length > 0) {
+            const lineage = (tableData.upstream_models && tableData.upstream_models.length > 0)
+                ? tableData.upstream_models
+                : tableData.dependencies;
+            if (lineage && lineage.length > 0) {
                 dependenciesHtml = `
                     <div class="modal-section">
                         <h4>Dépendances</h4>
                         <ul class="dependencies-list">
-                            ${tableData.dependencies.map(dep => `<li><code>${dep}</code></li>`).join('')}
+                            ${lineage.map(dep => `<li><code>${dep}</code></li>`).join('')}
                         </ul>
                     </div>
                 `;
@@ -2171,6 +2174,10 @@
                         ${certBadgeHtml}
                     </div>
                     <p class="table-description-fr">${tableData.description_fr}</p>
+                    ${tableData.tags && tableData.tags.length > 0 ? `
+                    <div class="table-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+                        ${tableData.tags.map(t => `<span class="cat-chip" style="font-size:0.75rem;">${t}</span>`).join('')}
+                    </div>` : ''}
                     ${certActionHtml ? `<div class="table-detail-actions">${certActionHtml}</div>` : ''}
                 </div>
                 ${dependenciesHtml}

@@ -198,6 +198,8 @@ class SilverTableDetail(BaseModel):
     name: str
     description_fr: str
     dependencies: List[str]
+    tags: List[str] = []
+    upstream_models: List[str] = []
     table_schema: TableSchema = Field(alias="schema")  # API key "schema"; avoids shadowing BaseModel.schema
     preview: List[Dict[str, Any]]
     certified: bool = False
@@ -295,8 +297,12 @@ async def get_silver_catalog(
             tables.append(SilverTableInfo(
                 name=table_name,
                 actual_table_name=table_name,
-                description_fr=pipeline.description_fr or "Description non disponible",
-                dependencies=pipeline.dependencies or [],
+                description_fr=(
+                    catalogue_info.get("description")
+                    or pipeline.description_fr
+                    or "Description non disponible"
+                ),
+                dependencies=catalogue_info.get("upstream_models") or pipeline.dependencies or [],
                 version=version,
                 row_count=row_count,
                 certified=cert_status is not None and cert_status.get("certified", False),
@@ -381,8 +387,14 @@ async def get_silver_table_detail(
         
         return SilverTableDetail(
             name=table_name,
-            description_fr=pipeline_info.description_fr or "Description non disponible",
-            dependencies=pipeline_info.dependencies or [],
+            description_fr=(
+                table_catalogue.get("description")
+                or pipeline_info.description_fr
+                or "Description non disponible"
+            ),
+            dependencies=table_catalogue.get("upstream_models") or pipeline_info.dependencies or [],
+            tags=table_catalogue.get("tags") or [],
+            upstream_models=table_catalogue.get("upstream_models") or [],
             table_schema=table_schema,
             preview=preview_data,
             certified=cert_status is not None and cert_status.get("certified", False),
@@ -663,116 +675,43 @@ async def refresh_catalogue(
     user_id: str = Depends(verify_api_key_or_admin),
     session: AsyncSession = Depends(get_db)
 ):
-    """
-    Refresh the data catalogue in PostgreSQL from the YAML file.
-    
-    This endpoint reads config/data_catalogue.yaml, enriches it with
-    schema and preview data from S3 (Delta/Parquet), and syncs to PostgreSQL.
-    
-    Available to all authenticated users (API key or admin secret).
-    
-    Args:
-        request: FastAPI request object for rate limiting
-        user_id: Authenticated user ID or "admin"
-        session: AsyncSession (DB)
-        
-    Returns:
-        Sync status with number of tables and timestamp
+    """Stamp last_synced on the pipeline-written catalogue document in PostgreSQL.
+
+    The pipeline project (dbt + manifest loader) is the single source of truth —
+    it writes descriptions, tags, schema, preview and row_count after each run.
+    This endpoint just reads that document, updates last_synced, and writes it back.
+    No S3 reads, no YAML reads. Completes in < 1 s.
     """
     try:
-        import yaml
         from datetime import datetime, timezone
-        
-        settings = get_settings()
-        
-        # Find catalogue file
-        possible_paths = [
-            Path(__file__).parent.parent.parent / "config" / "data_catalogue.yaml",
-            Path("/app/config/data_catalogue.yaml"),
-            Path("config/data_catalogue.yaml"),
-        ]
-        
-        catalogue_path = None
-        for path in possible_paths:
-            if path.exists():
-                catalogue_path = path
-                break
-        
-        if not catalogue_path:
+
+        existing_doc = await catalogue_repo.get(session)
+        if not existing_doc:
             raise HTTPException(
-                status_code=500,
-                detail=f"Catalogue file not found in any of: {[str(p) for p in possible_paths]}"
+                status_code=404,
+                detail="No catalogue document found in PostgreSQL. Run the pipeline first.",
             )
-        
-        # Load YAML
-        logger.info(f"Loading catalogue from {catalogue_path}")
-        with open(catalogue_path, 'r', encoding='utf-8') as f:
-            catalogue_data = yaml.safe_load(f)
-        
-        # Enrich with Delta table metadata (schema + preview)
-        tables_data = catalogue_data.get('tables', {})
-        enriched_tables = {}
-        
-        for table_name, table_info in tables_data.items():
-            enriched_table = dict(table_info)
-            
-            try:
-                # Get schema from Delta table
-                table_path = settings.get_silver_path(table_name)
-                schema_info = DeltaOperations.get_table_schema(table_path)
-                
-                enriched_table['schema'] = {
-                    'fields': schema_info['fields'],
-                    'version': schema_info['version'],
-                    'num_fields': schema_info['num_fields']
-                }
-                
-                # Get preview data (first 10 rows)
-                preview_data = DeltaOperations.preview_table(
-                    table_path=table_path,
-                    limit=10,
-                    filters=None,
-                    sort_by=None,
-                    sort_order="asc"
-                )
-                enriched_table['preview'] = preview_data['data']
-                
-                logger.info(f"Enriched {table_name} with schema and preview")
-            except Exception as e:
-                logger.warning(f"Could not enrich {table_name}: {e}")
-                # Keep original table info without enrichment
-            
-            enriched_tables[table_name] = enriched_table
-        
+
         sync_time = datetime.now(timezone.utc)
-        document = {
-            "tables": enriched_tables,
-            "version": catalogue_data.get("version", "unknown"),
-            "generated_at": catalogue_data.get("generated_at", ""),
-            "last_synced": sync_time.isoformat(),
-            "source_file": "data_catalogue.yaml",
-            "enriched": True,
-        }
-        document = _make_json_serializable(document)
-        await catalogue_repo.set(session, document)
-        num_tables = len(enriched_tables)
-        logger.info("Synced %d enriched tables to DB at %s", num_tables, sync_time.isoformat())
-        
-        result = {
-            'status': 'success',
-            'tables_synced': num_tables,
-            'last_synced': sync_time.isoformat(),
-            'version': catalogue_data.get('version', 'unknown')
-        }
-        
-        return CatalogueRefreshResponse(**result)
-    
+        existing_doc["last_synced"] = sync_time.isoformat()
+        await catalogue_repo.set(session, existing_doc)
+
+        num_tables = len(existing_doc.get("tables", {}))
+        logger.info("Catalogue refreshed: %d tables, last_synced=%s", num_tables, sync_time.isoformat())
+
+        return CatalogueRefreshResponse(
+            status="success",
+            tables_synced=num_tables,
+            last_synced=sync_time.isoformat(),
+            version=existing_doc.get("version", "unknown"),
+        )
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to refresh catalogue: {e}", exc_info=True)
+        logger.error("Failed to refresh catalogue: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to refresh catalogue: {str(e)}"
+            detail=f"Failed to refresh catalogue: {str(e)}",
         )
 
