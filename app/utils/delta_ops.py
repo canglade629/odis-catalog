@@ -410,6 +410,7 @@ class DeltaOperations:
         if sort_by and sort_by in df.columns:
             df = df.sort_values(by=sort_by, ascending=(sort_order.lower() == "asc"))
         df_preview = df.head(limit).copy()
+        import decimal as _decimal
         for col in df_preview.columns:
             if pd.api.types.is_datetime64_any_dtype(df_preview[col]):
                 df_preview[col] = df_preview[col].astype(str)
@@ -419,6 +420,10 @@ class DeltaOperations:
                     import json
                     df_preview[col] = df_preview[col].apply(
                         lambda x: json.dumps(x) if isinstance(x, dict) else x
+                    )
+                elif isinstance(sample, _decimal.Decimal):
+                    df_preview[col] = df_preview[col].apply(
+                        lambda x: float(x) if isinstance(x, _decimal.Decimal) else x
                     )
         records = df_preview.to_dict(orient="records")
         return {
@@ -496,17 +501,20 @@ class DeltaOperations:
         
         # Convert to records for JSON serialization
         # Handle datetime and other special types
+        import decimal as _decimal
         df_preview = df_preview.copy()
         for col in df_preview.columns:
             if pd.api.types.is_datetime64_any_dtype(df_preview[col]):
                 df_preview[col] = df_preview[col].astype(str)
             # Convert dict/struct columns to JSON strings for display
             elif df_preview[col].dtype == 'object':
-                # Check if the column contains dicts
+                # Check if the column contains dicts or Decimals
                 sample = df_preview[col].iloc[0] if len(df_preview) > 0 else None
                 if isinstance(sample, dict):
                     import json
                     df_preview[col] = df_preview[col].apply(lambda x: json.dumps(x) if isinstance(x, dict) else x)
+                elif isinstance(sample, _decimal.Decimal):
+                    df_preview[col] = df_preview[col].apply(lambda x: float(x) if isinstance(x, _decimal.Decimal) else x)
         
         records = df_preview.to_dict(orient="records")
         columns = list(df_preview.columns)
