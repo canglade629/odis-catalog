@@ -15,13 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 def _s3_props() -> Dict[str, str]:
-    """Build PyIceberg S3 FileIO properties for Scaleway."""
+    """Build PyIceberg S3 FileIO properties for Scaleway (PyArrowFileIO)."""
     s = get_settings()
     return {
         "s3.endpoint": s.scw_object_storage_endpoint,
         "s3.access-key-id": s.scw_access_key,
         "s3.secret-access-key": s.scw_secret_key,
         "s3.region": s.scw_region,
+        "py-io-impl": "pyiceberg.io.pyarrow.PyArrowFileIO",
     }
 
 
