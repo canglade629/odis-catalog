@@ -395,3 +395,19 @@ async def refresh_catalogue(
         )
 
 
+@router.get("/debug/s3-ls")
+@limiter.limit("10/hour")
+async def debug_s3_ls(
+    request: Request,
+    prefix: str = "silver/",
+    user_id: str = Depends(verify_api_key_or_admin),
+):
+    """List S3 objects under a prefix (admin debug)."""
+    from app.utils.s3_ops import get_s3_operations
+    from app.core.config import get_settings
+    s3 = get_s3_operations()
+    settings = get_settings()
+    full_prefix = f"s3://{settings.scw_bucket_name}/{prefix.lstrip('/')}"
+    files = s3.list_files(full_prefix)
+    return {"prefix": full_prefix, "count": len(files), "files": files[:100]}
+
