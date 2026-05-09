@@ -62,3 +62,9 @@ pipelines:
     pipeline_class: "app.pipelines.silver.fact_siae_poste.FactSIAEPostePipeline"
     description_fr: "Table de faits des postes ouverts en SIAE avec codes ROME, types de contrats et disponibilité. FK vers dim_siae_structure."
 
+  - name: "fact_logement_social_rpls"
+    target_table: "fact_logement_social_rpls"
+    dependencies: ["bronze.logement_social", "silver.dim_commune"]
+    pipeline_class: "app.pipelines.silver.fact_logement_social_rpls.FactLogementSocialRplsPipeline"
+    description_fr: "Table de faits des statistiques sur le parc locatif social (RPLS) à la maille commune et millésime annuel. FK vers dim_commune."
+

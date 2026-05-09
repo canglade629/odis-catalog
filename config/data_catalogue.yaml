@@ -556,6 +556,107 @@ tables:
         description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc, ingestion_timestamp) au format JSON."
         example: '{"job_insert_id": "fact_siae_poste", "job_insert_date_utc": "2025-12-03T17:27:10.044Z", "job_modify_id": "fact_siae_poste", "job_modify_date_utc": "2025-12-03T17:27:10.044Z", "ingestion_timestamp": "2025-12-03T15:00:00.000Z"}'
 
+  fact_logement_social_rpls:
+    description: "Table de faits des statistiques sur le parc locatif social (Répertoire des logements locatifs des bailleurs sociaux - RPLS) à la maille commune et millésime annuel. Clé composite (commune_sk, annee). FK vers dim_commune."
+    row_count: 0
+    fields:
+      commune_sk:
+        type: string
+        nullable: false
+        description: "Clé étrangère vers dim_commune (hash MD5 du code INSEE normalisé). Les codes arrondissement de Paris (751xx), Lyon (693xx) et Marseille (132xx) sont remontés vers le code commune parent avant calcul de la clé."
+        example: "b344953b75615eb41588c6753a3899e9"
+
+      annee:
+        type: integer
+        nullable: false
+        description: "Millésime RPLS extrait du nom de fichier source via regexp_extract. Forme avec commune_sk la clé composite de déduplication temporelle."
+        example: 2024
+
+      nb_logements_total_tout_types:
+        type: integer
+        nullable: true
+        description: "Nombre total de logements tous types confondus sur la commune (source : nb_lgt_tot)."
+        example: 1250
+
+      nb_logements_total_sociaux:
+        type: integer
+        nullable: true
+        description: "Nombre total de logements sociaux (parc locatif social) sur la commune (source : nb_ls)."
+        example: 340
+
+      nb_logements_loues:
+        type: integer
+        nullable: true
+        description: "Nombre de logements sociaux loués (source : nb_loues)."
+        example: 310
+
+      nb_logements_vacants:
+        type: integer
+        nullable: true
+        description: "Nombre de logements sociaux vacants (source : nb_vacants)."
+        example: 18
+
+      nb_logements_vides:
+        type: integer
+        nullable: true
+        description: "Nombre de logements sociaux vides (source : nb_vides)."
+        example: 12
+
+      nb_logements_associatifs:
+        type: integer
+        nullable: true
+        description: "Nombre de logements sociaux gérés par des associations (source : nb_asso)."
+        example: 45
+
+      nb_logements_occupation_financiere:
+        type: integer
+        nullable: true
+        description: "Nombre de logements sociaux en occupation avec aide ou participation financière (source : nb_occup_finan)."
+        example: 8
+
+      nb_logements_occupation_temporaire:
+        type: integer
+        nullable: true
+        description: "Nombre de logements sociaux en occupation temporaire (source : nb_occup_temp)."
+        example: 4
+
+      nb_logements_qpv:
+        type: integer
+        nullable: true
+        description: "Nombre de logements sociaux situés en Quartiers Prioritaires de la Politique de la Ville (QPV) (source : nb_ls_en_qpv)."
+        example: 120
+
+      taux_vacance_pct:
+        type: float
+        nullable: true
+        description: "Taux de vacance dans le parc locatif social en pourcentage (source : tx_vac)."
+        example: 5.3
+
+      taux_vacance_3ans_pct:
+        type: float
+        nullable: true
+        description: "Taux de vacance structurelle (plus de 3 ans) dans le parc locatif social en pourcentage (source : tx_vac3)."
+        example: 1.8
+
+      taux_mobilite_pct:
+        type: float
+        nullable: true
+        description: "Taux de mobilité (rotation) dans le parc locatif social en pourcentage (source : tx_mob)."
+        example: 12.4
+
+      densite_logements_sociaux_pct:
+        type: float
+        nullable: true
+        description: "Densité des logements sociaux pour 100 résidences principales (source : densite)."
+        example: 27.2
+
+      job_metadata:
+        type: json
+        nullable: false
+        description: "Métadonnées de traçabilité (job_insert_id, job_insert_date_utc, job_modify_id, job_modify_date_utc, ingestion_timestamp) au format JSON. Conforme au pattern de toutes les tables silver."
+        example: '{"job_insert_id": "fact_logement_social_rpls", "job_insert_date_utc": "2026-05-09T00:00:00.000Z", "job_modify_id": "fact_logement_social_rpls", "job_modify_date_utc": "2026-05-09T00:00:00.000Z", "ingestion_timestamp": "2026-05-09T00:00:00.000Z"}'
+
+
 # Notes d'utilisation:
 # - Toutes les clés surrogates (*_sk) sont des hash MD5 et servent de clés primaires/étrangères
 # - Le champ job_metadata est présent dans toutes les tables pour la traçabilité (format JSON)
