@@ -209,43 +209,49 @@ class SilverTableDetail(BaseModel):
 
 @router.get("/catalog", response_model=CatalogResponse)
 @limiter.limit("30/minute")
-async def get_catalog(request: Request, user_id: str = Depends(verify_api_key_or_admin)):
+async def get_catalog(
+    request: Request,
+    user_id: str = Depends(verify_api_key_or_admin),
+    session: AsyncSession = Depends(get_db),
+):
+    """Get the complete data catalog with all schemas and tables.
+
+    Silver tables are read from the data_catalogue PostgreSQL document.
+    Bronze tables are read from the iceberg_tables catalog table (PyIceberg SqlCatalog).
+    Gold is not yet populated and returns an empty list.
+    No S3 reads — all data comes from PostgreSQL.
     """
-    Get the complete data catalog with all schemas and tables.
-    
-    Scans S3 for Delta/Parquet tables in bronze, silver, and gold layers.
-    """
-    logger.info("Fetching data catalog")
-    settings = get_settings()
-    
+    logger.info("Fetching data catalog from PostgreSQL")
+    from sqlalchemy import text
+
     try:
-        schemas = {}
-        
-        # Scan each layer (S3 paths)
-        for layer in ["bronze", "silver", "gold"]:
-            layer_path = (
-                settings.bronze_path
-                if layer == "bronze"
-                else (settings.silver_path if layer == "silver" else settings.gold_path)
+        # Silver: from pipeline-written data_catalogue document
+        catalogue = await load_catalogue_from_db(session)
+        silver_tables = [
+            TableInfo(name=name, path=f"silver/{name}", version=0)
+            for name in sorted(catalogue.get("tables", {}).keys())
+        ]
+
+        # Bronze: from PyIceberg's SqlCatalog (iceberg_tables)
+        bronze_tables = []
+        try:
+            result = await session.execute(
+                text(
+                    "SELECT table_name FROM iceberg_tables "
+                    "WHERE table_namespace = 'bronze' ORDER BY table_name"
+                )
             )
-            try:
-                tables = DeltaOperations.list_delta_tables(layer_path)
-                schemas[layer] = [
-                    TableInfo(
-                        name=table["name"],
-                        path=table["path"],
-                        version=table["version"]
-                    )
-                    for table in tables
-                ]
-            except Exception as e:
-                logger.warning(f"Could not list tables in {layer}: {e}")
-                schemas[layer] = []
-        
-        return CatalogResponse(schemas=schemas)
-    
+            bronze_tables = [
+                TableInfo(name=row[0], path=f"bronze/{row[0]}", version=0)
+                for row in result
+            ]
+        except Exception as e:
+            logger.warning("Could not read bronze tables from iceberg_tables: %s", e)
+
+        return CatalogResponse(schemas={"bronze": bronze_tables, "silver": silver_tables, "gold": []})
+
     except Exception as e:
-        logger.error(f"Error fetching catalog: {e}", exc_info=True)
+        logger.error("Error fetching catalog: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch catalog: {str(e)}")
 
 
@@ -488,7 +494,25 @@ async def preview_table(
     
     # Check access permissions
     await verify_table_access(layer, table, session, current_user)
-    
+
+    # Silver: serve the 10-row cached preview from PostgreSQL — fast and no S3 reads.
+    # Filters and sort are ignored for the cached version (same 10 rows used in the catalogue modal).
+    if layer == "silver":
+        catalogue = await load_catalogue_from_db(session)
+        table_doc = catalogue.get("tables", {}).get(table, {})
+        cached = _make_json_serializable(table_doc.get("preview", []))
+        if cached:
+            sliced = cached[: preview_req.limit]
+            columns = list(sliced[0].keys()) if sliced else []
+            return PreviewResponse(
+                columns=columns,
+                data=sliced,
+                total_rows=table_doc.get("row_count") or len(cached),
+                filtered_rows=len(sliced),
+                preview_rows=len(sliced),
+            )
+
+    # Bronze / Gold (admin only): fall back to live Iceberg scan
     # Construct table path
     if layer == "silver":
         table_path = settings.get_silver_path(table)
@@ -532,140 +556,17 @@ async def execute_sql_query(
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
+    """SQL queries against the data lake are not available in read-only mode.
+
+    Use GET /api/data/catalog/silver/{table_name} to explore table schemas and previews.
     """
-    Execute a SQL query against Delta tables.
-    
-    Tables should be referenced as layer_table_name (e.g., bronze_accueillants, silver_geo).
-    All available Delta tables are automatically registered.
-    
-    Args:
-        query_req: SQL query request with query string and optional limit
-    """
-    logger.info(f"Executing SQL query (limit={query_req.limit})")
-    logger.debug(f"SQL: {query_req.sql}")
-    
-    settings = get_settings()
-    sql_executor = SQLExecutor()
-    user_id = current_user.user_id
-    is_admin = current_user.is_admin
-    
-    try:
-        start_time = time.time()
-        
-        # Register all Delta tables from all layers (S3 paths)
-        registered_tables = []
-        registration_errors = []
-        
-        for layer in ["bronze", "silver", "gold"]:
-            layer_path = (
-                settings.bronze_path
-                if layer == "bronze"
-                else (settings.silver_path if layer == "silver" else settings.gold_path)
-            )
-            try:
-                tables = DeltaOperations.list_delta_tables(layer_path)
-                logger.info(f"Found {len(tables)} tables in {layer}")
-                for table in tables:
-                    # Use underscore instead of dot for SQL compatibility
-                    table_name = f"{layer}_{table['name']}"
-                    table_path = table['path']
-                    
-                    # Check access for non-admin users
-                    if not is_admin:
-                        # Non-admins can only query certified silver tables
-                        if layer != "silver":
-                            logger.info(f"Skipping {table_name} - non-silver table, user not admin")
-                            continue
-                        
-                        # Check if silver table is certified
-                        certified = await is_table_certified(layer, table['name'], session)
-                        if not certified:
-                            logger.info(f"Skipping {table_name} - not certified")
-                            continue
-                    
-                    try:
-                        sql_executor.register_delta_table(table_name, table_path)
-                        registered_tables.append(table_name)
-                        logger.info(f"Successfully registered table {table_name}")
-                    except Exception as e:
-                        error_msg = f"Failed to register {table_name}: {str(e)}"
-                        logger.error(error_msg)
-                        registration_errors.append(error_msg)
-            except Exception as e:
-                error_msg = f"Failed to list tables in {layer}: {str(e)}"
-                logger.error(error_msg)
-                registration_errors.append(error_msg)
-        
-        logger.info(f"Registered {len(registered_tables)} tables: {registered_tables}")
-        
-        if not registered_tables:
-            error_details = "; ".join(registration_errors) if registration_errors else "No tables found"
-            raise HTTPException(
-                status_code=500, 
-                detail=f"No tables could be registered. {error_details}"
-            )
-        
-        # Execute the query
-        result_df = sql_executor.execute_query(query_req.sql)
-        
-        # Track usage for queried tables
-        from app.utils.query_tracker import increment_query_count
-        
-        # Parse SQL to find which tables were queried
-        sql_upper = query_req.sql.upper()
-        queried_tables = []
-        for table_name in registered_tables:
-            # Check if table is referenced in query (case insensitive)
-            if table_name.upper() in sql_upper:
-                queried_tables.append(table_name)
-        
-        # Track usage for each queried table
-        for table_name in queried_tables:
-            await increment_query_count(session, table_name, user_id)
-        
-        # Apply limit
-        limited_df = result_df.head(query_req.limit)
-        
-        # Convert to response format
-        columns = limited_df.columns.tolist()
-        data = limited_df.to_dict('records')
-        
-        # Convert any NaN or None to null properly
-        for row in data:
-            for key, value in row.items():
-                if value is None or (isinstance(value, float) and str(value) == 'nan'):
-                    row[key] = None
-        
-        execution_time = (time.time() - start_time) * 1000  # ms
-        
-        logger.info(f"Query executed successfully, returned {len(data)} rows in {execution_time:.2f}ms")
-        
-        return QueryResponse(
-            columns=columns,
-            data=data,
-            row_count=len(result_df),
-            execution_time_ms=round(execution_time, 2)
-        )
-    
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
-    except Exception as e:
-        logger.error(f"Error executing SQL query: {e}", exc_info=True)
-        error_msg = str(e)
-        # Make error messages more user-friendly
-        if "Catalog Error" in error_msg or "not found" in error_msg.lower():
-            available_tables = ", ".join(registered_tables) if registered_tables else "none"
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Table not found. Available tables: {available_tables}. Use format: layer_table_name (e.g., bronze_accueillants, silver_geo)"
-            )
-        elif "Parser Error" in error_msg or "syntax" in error_msg.lower():
-            raise HTTPException(status_code=400, detail=f"SQL syntax error: {error_msg}")
-        else:
-            raise HTTPException(status_code=500, detail=f"Query execution failed: {error_msg}")
-    finally:
-        sql_executor.close()
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "SQL queries against the data lake are not available in read-only mode. "
+            "Use GET /api/data/catalog/silver/{table_name} to explore table schemas and previews."
+        ),
+    )
 
 
 @router.post("/catalog/refresh", response_model=CatalogueRefreshResponse)

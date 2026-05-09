@@ -23,12 +23,10 @@ The app runs in a container using **Scaleway S3** for storage and **PostgreSQL**
    ```
    API: http://localhost:8080. Health: http://localhost:8080/health. **Production:** [https://odace.services.d4g.fr](https://odace.services.d4g.fr) (Coolify).
 
-4. **Optional – sync catalogue from YAML to DB**:
+4. **Populate the catalogue** — the pipeline project writes schema, descriptions, and previews to PostgreSQL after each dbt run. Once it has run at least once, trigger a refresh to stamp `last_synced`:
    ```bash
-   python scripts/sync_catalogue_to_db.py
+   curl -X POST -H "Authorization: Bearer $ADMIN_SECRET" https://odace.services.d4g.fr/api/data/catalog/refresh
    ```
-
-## Deploy with Coolify
 
 You can deploy this app to [Coolify](https://coolify.io) (self-hosted PaaS) in one click.
 
@@ -38,7 +36,7 @@ You can deploy this app to [Coolify](https://coolify.io) (self-hosted PaaS) in o
    - `SCW_OBJECT_STORAGE_ENDPOINT`, `SCW_REGION`, `SCW_BUCKET_NAME`, `SCW_ACCESS_KEY`, `SCW_SECRET_KEY` (Scaleway S3)
    - `PG_DB_HOST`, `PG_DB_PORT`, `PG_DB_NAME`, `PG_DB_USER`, `PG_DB_PWD` (or `DATABASE_URL`)
    - `ADMIN_SECRET`, `ENVIRONMENT`, `CORS_ORIGINS`
-4. **Post-deploy**: Apply the database schema once (e.g. from your machine: `psql -h $PG_DB_HOST ... -f app/db/schema.sql`). Optionally run `python scripts/sync_catalogue_to_db.py` to sync the catalogue from YAML to the DB.
+4. **Post-deploy**: Apply the database schema once (e.g. from your machine: `psql -h $PG_DB_HOST ... -f app/db/schema.sql`). The catalogue is populated automatically by the pipeline project after each dbt run — no manual sync needed.
 
 **Coolify troubleshooting (404):**
 - **Ports**: Do not bind host ports; the repo uses `ports: ["8080"]` and Traefik labels for **https://odace.services.d4g.fr**.
@@ -97,6 +95,28 @@ Authorization: Bearer sk_live_YOUR_API_KEY
    ```
 
 ## Core API Endpoints
+
+### Data Catalogue
+
+**Browse silver tables** (descriptions, row counts, certification status):
+```bash
+GET /api/data/catalog/silver
+```
+
+**Get table details** (schema, field descriptions, 10-row preview):
+```bash
+GET /api/data/catalog/silver/{table_name}
+```
+
+**Refresh catalogue** (stamp `last_synced` — pipeline project writes the actual data):
+```bash
+POST /api/data/catalog/refresh
+```
+
+**Admin layer tree** (bronze + silver table names from PostgreSQL — no S3 scan):
+```bash
+GET /api/data/catalog
+```
 
 ### Pipeline Management
 
@@ -386,15 +406,18 @@ https://odace.services.d4g.fr/docs
 - `siae_structures` - Social inclusion employment structures (API source)
 - `siae_postes` - Job positions in social inclusion structures (API source)
 
-### Silver Layer (Data Transformation)
-- `accueillants` - Cleaned host data
-- `geo` - Normalized commune data
-- `gares` - Deduplicated station data
-- `lignes` - Deduplicated line data
-- `logement` - Standardized housing data
-- `zones_attraction` - Processed attraction zones
-- `siae_structures` - Cleaned SIAE structures with INSEE codes
-- `siae_postes` - Standardized job positions with geographic context
+### Silver Layer (dbt models — read via catalogue API)
+- `dim_commune` — Communes françaises (INSEE codes, departments, regions)
+- `dim_accueillant` — Structures d'accueil with geographic enrichment
+- `dim_gare` — Train stations with geographic enrichment
+- `dim_gare_segment` — Station segment reference (A/B/C)
+- `dim_ligne` — Train lines
+- `dim_siae_structure` — SIAE structures (social inclusion employment)
+- `fact_logement_social_rpls` — Social housing statistics (RPLS) by commune
+- `fact_loyer_annonce` — Advertised rent statistics by commune
+- `fact_siae_poste` — Job positions in SIAE structures
+- `fact_zone_attraction` — Urban attraction zones
+- `ref_logement_profil` — Housing profile reference table
 
 ## Response Formats
 
