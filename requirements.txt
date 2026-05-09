@@ -9,9 +9,9 @@ psycopg2-binary
 boto3
 pyiceberg[pyarrow,s3fs]==0.11.1
 pandas==2.1.4
-pyarrow==14.0.2
+pyarrow==17.0.0
 openpyxl==3.1.2
-duckdb==0.10.2
+duckdb==1.4.4
 python-dotenv==1.0.0
 aiofiles==23.2.1
 httpx==0.26.0
