@@ -295,74 +295,36 @@ async def refresh_catalogue(
     user_id: str = Depends(verify_api_key_or_admin),
     session: AsyncSession = Depends(get_db),
 ):
-    """Merge YAML descriptions with pipeline-written schema/preview from PostgreSQL.
+    """Refresh the catalogue view from the PostgreSQL document written by the pipeline.
 
-    Zero S3 reads — the pipeline project is responsible for writing schema,
-    preview and row_count to the data_catalogue table after each dbt run.
-    This endpoint simply overlays the human-authored YAML documentation on top
-    of that data and persists the merged document.
+    The pipeline project (dbt + manifest loader) is the single source of truth:
+    it writes descriptions, examples, schema, preview and row_count into the
+    data_catalogue table.  This endpoint simply reads that document, stamps a
+    new last_synced timestamp, and writes it back so the UI picks up the latest
+    data without any S3 or YAML reads.
     """
     try:
-        import yaml
         from datetime import datetime, timezone
 
-        # Locate data_catalogue.yaml
-        possible_paths = [
-            Path(__file__).parent.parent.parent / "config" / "data_catalogue.yaml",
-            Path("/app/config/data_catalogue.yaml"),
-            Path("config/data_catalogue.yaml"),
-        ]
-        catalogue_path = next((p for p in possible_paths if p.exists()), None)
-        if not catalogue_path:
+        existing_doc = await catalogue_repo.get(session)
+        if not existing_doc:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Catalogue file not found in any of: {[str(p) for p in possible_paths]}"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No catalogue document found in PostgreSQL. Run the pipeline first.",
             )
 
-        logger.info("Loading catalogue from %s", catalogue_path)
-        with open(catalogue_path, "r", encoding="utf-8") as f:
-            catalogue_data = yaml.safe_load(f)
-        yaml_tables = catalogue_data.get("tables", {})
-
-        # Read existing document written by the pipeline project
-        existing_doc = await catalogue_repo.get(session)
-        pipeline_tables = existing_doc.get("tables", {}) if existing_doc else {}
-
-        # Merge: YAML is the base (descriptions, examples); pipeline provides
-        # the live schema, preview and row_count
-        enriched_tables = {}
-        for table_name, yaml_info in yaml_tables.items():
-            enriched = dict(yaml_info)
-            pipeline = pipeline_tables.get(table_name, {})
-
-            if "schema" in pipeline:
-                enriched["schema"] = pipeline["schema"]
-            if "preview" in pipeline:
-                enriched["preview"] = pipeline["preview"]
-            if pipeline.get("row_count"):
-                enriched["row_count"] = pipeline["row_count"]
-
-            enriched_tables[table_name] = enriched
-
         sync_time = datetime.now(timezone.utc)
-        document = {
-            "tables": enriched_tables,
-            "version": catalogue_data.get("version", "unknown"),
-            "generated_at": catalogue_data.get("generated_at", ""),
-            "last_synced": sync_time.isoformat(),
-            "source_file": "data_catalogue.yaml",
-            "enriched": True,
-        }
-        await catalogue_repo.set(session, document)
+        existing_doc["last_synced"] = sync_time.isoformat()
+        await catalogue_repo.set(session, existing_doc)
 
-        num_tables = len(enriched_tables)
-        logger.info("Merged %d tables from YAML + pipeline data at %s", num_tables, sync_time.isoformat())
+        num_tables = len(existing_doc.get("tables", {}))
+        logger.info("Catalogue refreshed: %d tables, last_synced=%s", num_tables, sync_time.isoformat())
 
         return CatalogueRefreshResponse(
             status="success",
             tables_synced=num_tables,
             last_synced=sync_time.isoformat(),
-            version=catalogue_data.get("version", "unknown"),
+            version=existing_doc.get("version", "unknown"),
         )
 
     except HTTPException:
@@ -371,7 +333,7 @@ async def refresh_catalogue(
         logger.error("Failed to refresh catalogue: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to refresh catalogue: {str(e)}"
+            detail=f"Failed to refresh catalogue: {str(e)}",
         )
 
 
