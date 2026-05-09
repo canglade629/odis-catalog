@@ -149,12 +149,12 @@ class Settings(BaseSettings):
         return f"{self.raw_path}/{domain}"
 
     def get_bronze_path(self, table: str) -> str:
-        """Get path to bronze Delta table."""
-        return f"{self.bronze_path}/{table}"
+        """Get path to bronze Iceberg table on S3."""
+        return f"{self.bronze_path}/{table}.iceberg"
 
     def get_silver_path(self, table: str) -> str:
         """Get path to silver Iceberg table on S3."""
-        return f"{self.silver_path}/{table}"
+        return f"{self.silver_path}/{table}.iceberg"
 
     def get_gold_path(self, table: str) -> str:
         """Get path to gold table."""

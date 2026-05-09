@@ -22,6 +22,7 @@ def _s3_props() -> Dict[str, str]:
         "s3.access-key-id": s.scw_access_key,
         "s3.secret-access-key": s.scw_secret_key,
         "s3.region": s.scw_region,
+        "s3.path-style-access": "true",
         "py-io-impl": "pyiceberg.io.pyarrow.PyArrowFileIO",
     }
 
