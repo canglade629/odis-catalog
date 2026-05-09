@@ -345,3 +345,266 @@
     .doc-content h1 { font-size: 2rem; }
     .doc-content h2 { font-size: 1.5rem; }
 }
+
+/* ============================================================
+   MARKETPLACE DATA CATALOGUE
+   ============================================================ */
+
+/* Hero banner */
+.marketplace-hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
+    border-radius: 16px;
+    padding: 3rem 2rem 2.5rem;
+    margin-bottom: 1.25rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.marketplace-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 15% 60%, rgba(99, 102, 241, 0.18) 0%, transparent 50%),
+        radial-gradient(circle at 85% 20%, rgba(16, 185, 129, 0.12) 0%, transparent 45%);
+    pointer-events: none;
+}
+.marketplace-hero-inner {
+    position: relative;
+    z-index: 1;
+    max-width: 640px;
+    margin: 0 auto;
+}
+.marketplace-hero-eyebrow {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(110, 231, 183, 0.3);
+    padding: 4px 14px;
+    border-radius: 999px;
+    margin-bottom: 1rem;
+}
+.marketplace-hero-title {
+    font-size: 1.9rem;
+    font-weight: 800;
+    color: #f8fafc;
+    margin: 0 0 0.6rem;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}
+.marketplace-hero-subtitle {
+    font-size: 0.95rem;
+    color: #94a3b8;
+    margin: 0 0 1.4rem;
+    line-height: 1.6;
+}
+.marketplace-stats {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.6rem;
+}
+.marketplace-stat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    padding: 5px 13px;
+    border-radius: 999px;
+}
+.marketplace-search-wrap {
+    position: relative;
+    max-width: 500px;
+    margin: 0 auto;
+}
+.marketplace-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748b;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+}
+.marketplace-search {
+    width: 100%;
+    padding: 0.75rem 1rem 0.75rem 2.75rem;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.97);
+    font-size: 0.95rem;
+    color: #1e293b;
+    outline: none;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+.marketplace-search:focus {
+    border-color: #6366f1;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), 0 0 0 3px rgba(99, 102, 241, 0.25);
+}
+
+/* Category pills row */
+.category-pills-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+.category-pills {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+.category-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 1rem;
+    border-radius: 999px;
+    border: 1.5px solid #e2e8f0;
+    background: white;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.category-pill:hover { border-color: #94a3b8; color: #334155; background: #f8fafc; }
+.category-pill.active {
+    background: #0f172a; border-color: #0f172a; color: white;
+    font-weight: 600; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+}
+.category-pill.active.cat-geo      { background: #059669; border-color: #059669; }
+.category-pill.active.cat-logement { background: #d97706; border-color: #d97706; }
+.category-pill.active.cat-transport{ background: #7c3aed; border-color: #7c3aed; }
+.category-pill.active.cat-emploi   { background: #2563eb; border-color: #2563eb; }
+
+/* Marketplace catalog cards (overrides old .catalog-card) */
+.catalog-card {
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    padding: 0;
+}
+.catalog-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+    border-color: #cbd5e1;
+}
+
+/* Colored illustration band */
+.card-illus {
+    height: 88px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex-shrink: 0;
+}
+.card-illus-icon { opacity: 0.9; }
+.card-type-badge {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.78);
+    color: #334155;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* Card body */
+.card-body {
+    padding: 0.9rem 1rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+.card-body .card-header-with-cert { margin-bottom: 5px; }
+.card-body h4 {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #0f172a;
+    font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+    word-break: break-all;
+}
+.card-body .table-description-fr {
+    font-size: 0.82rem;
+    color: #64748b;
+    line-height: 1.5;
+    flex-grow: 1;
+    margin-bottom: 10px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.card-footer {
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.card-metadata {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Category chip on card */
+.cat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+/* Metadata badge refinement for marketplace */
+.catalog-card .metadata-badge {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+}
+
+/* Cert badge refinement */
+.catalog-card .cert-badge {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+}
+
+@media (max-width: 640px) {
+    .marketplace-hero { padding: 2rem 1.25rem; }
+    .marketplace-hero-title { font-size: 1.5rem; }
+    .category-pills-row { flex-direction: column; align-items: flex-start; }
+}

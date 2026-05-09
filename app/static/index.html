@@ -14,18 +14,41 @@
 </head>
 <body class="bg-neutral-50 text-neutral-800 font-sans antialiased leading-relaxed min-h-screen">
     <div class="max-w-[1400px] mx-auto p-5">
-        <div class="api-key-section bg-white rounded-lg shadow-sm p-5 mb-8 flex items-center gap-4 flex-wrap">
-            <div class="flex items-center gap-4 flex-1">
-                <span id="userBadge" class="user-badge hidden px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-semibold">👥 User</span>
-                <span id="adminBadge" class="admin-badge hidden px-3 py-1.5 rounded bg-neutral-700 text-white text-sm font-semibold">👤 Admin</span>
+        <!-- Top profile bar -->
+        <div class="api-key-section flex items-center justify-between gap-3 mb-6 px-4 py-2.5 rounded-xl bg-white/70 backdrop-blur border border-neutral-200 shadow-sm" style="min-height:48px">
+            <!-- Logo / brand -->
+            <div class="flex items-center gap-2.5">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                <span class="font-bold text-[0.92rem] tracking-tight text-neutral-800">Odace <span class="text-neutral-400 font-medium">Data</span></span>
             </div>
-            <div id="viewModeToggle" class="hidden ml-auto">
-                <button type="button" onclick="toggleViewMode()" id="viewModeBtn" class="btn-small btn-secondary px-3.5 py-1.5 text-sm rounded border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-100 hover:border-neutral-600 transition shadow-sm">
-                    <span id="viewModeIcon">👥</span>
-                    <span id="viewModeText">Switch to User View</span>
+
+            <!-- Right side: badges + actions -->
+            <div class="flex items-center gap-2">
+                <span id="userBadge" class="user-badge hidden items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                    Utilisateur
+                </span>
+                <span id="adminBadge" class="admin-badge hidden items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 text-slate-100 border border-slate-700 text-xs font-semibold">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
+                    Admin
+                </span>
+
+                <div id="viewModeToggle" class="hidden">
+                    <button type="button" onclick="toggleViewMode()" id="viewModeBtn"
+                        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-neutral-200 bg-neutral-50 text-neutral-600 text-xs font-medium hover:bg-neutral-100 hover:border-neutral-300 transition">
+                        <span id="viewModeIcon">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        </span>
+                        <span id="viewModeText">Vue utilisateur</span>
+                    </button>
+                </div>
+
+                <button type="button" onclick="logout()" id="logoutBtn"
+                    class="hidden items-center gap-1.5 px-3 py-1 rounded-full border border-neutral-200 bg-white text-neutral-500 text-xs font-medium hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    Déconnexion
                 </button>
             </div>
-            <button type="button" onclick="logout()" id="logoutBtn" class="hidden ml-2.5 px-3.5 py-1.5 text-sm rounded border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-100 transition shadow-sm">Logout</button>
         </div>
 
         <nav class="tabs flex gap-2.5 mb-8 bg-white p-2.5 rounded-lg shadow-sm hidden">
@@ -39,18 +62,43 @@
         </nav>
 
         <div id="catalogue" class="tab-content active">
-            <div class="catalog-header flex items-center justify-between mb-5">
-                <h2 class="text-2xl font-semibold text-neutral-800 m-0">Catalogue de la plateforme Odace</h2>
-                <div class="flex gap-2.5 items-center">
-                    <input type="text" id="catalog-search" placeholder="Rechercher une table..." onkeyup="filterCatalog()"
-                        class="px-3 py-2 border border-neutral-300 rounded min-w-[250px] bg-neutral-50 text-neutral-800 focus:outline-none focus:border-neutral-700 focus:bg-white" />
-                    <button type="button" onclick="refreshSilverCatalog()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 hover:border-neutral-600 hover:text-neutral-700 transition flex items-center justify-center" title="Synchroniser le catalogue (Admin uniquement)">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
-                    </button>
+            <!-- Hero banner -->
+            <div class="marketplace-hero">
+                <div class="marketplace-hero-inner">
+                    <span class="marketplace-hero-eyebrow">Data Marketplace</span>
+                    <h1 class="marketplace-hero-title">Catalogue de données Odace</h1>
+                    <p class="marketplace-hero-subtitle">Explorez et accédez aux jeux de données certifiés de la plateforme</p>
+                    <div id="marketplace-stats" class="marketplace-stats">
+                        <span class="marketplace-stat-chip">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                            Chargement…
+                        </span>
+                    </div>
+                    <div class="marketplace-search-wrap">
+                        <span class="marketplace-search-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        </span>
+                        <input type="text" id="catalog-search" placeholder="Rechercher un jeu de données…" onkeyup="filterCatalog()" class="marketplace-search" />
+                    </div>
                 </div>
             </div>
-            <div id="silver-catalog-grid" class="pipeline-grid grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5 mt-4">
-                <p class="info-text text-neutral-500 italic py-5 text-center col-span-full">Chargement du catalogue...</p>
+
+            <!-- Category pills + sync button -->
+            <div class="category-pills-row">
+                <div class="category-pills" id="category-pills">
+                    <button class="category-pill active" data-category="all" onclick="filterByCategory('all')">Tout</button>
+                    <button class="category-pill cat-geo" data-category="geo" onclick="filterByCategory('geo')">🗺 Géographie</button>
+                    <button class="category-pill cat-logement" data-category="logement" onclick="filterByCategory('logement')">🏠 Logement</button>
+                    <button class="category-pill cat-transport" data-category="transport" onclick="filterByCategory('transport')">🚂 Transport</button>
+                    <button class="category-pill cat-emploi" data-category="emploi" onclick="filterByCategory('emploi')">👥 Emploi</button>
+                </div>
+                <button type="button" onclick="refreshSilverCatalog()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 hover:border-neutral-600 hover:text-neutral-700 transition flex items-center justify-center" title="Synchroniser le catalogue (Admin uniquement)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                </button>
+            </div>
+
+            <div id="silver-catalog-grid" class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
+                <p class="info-text text-neutral-500 italic py-5 text-center col-span-full">Chargement du catalogue…</p>
             </div>
         </div>
 
@@ -374,15 +422,13 @@
 
         function showAdminUI() {
             document.getElementById('adminBadge').classList.remove('hidden');
-            document.getElementById('adminBadge').classList.add('inline-block');
+            document.getElementById('adminBadge').classList.add('inline-flex');
             document.getElementById('userBadge').classList.add('hidden');
-            document.getElementById('userBadge').classList.remove('inline-block');
+            document.getElementById('userBadge').classList.remove('inline-flex');
             document.getElementById('viewModeToggle').classList.remove('hidden');
             document.getElementById('viewModeToggle').classList.add('flex');
             document.getElementById('logoutBtn').classList.remove('hidden');
-            document.getElementById('logoutBtn').classList.add('inline-block');
-            document.querySelector('.tabs').classList.remove('hidden');
-            document.querySelector('.tabs').classList.add('flex');
+            document.getElementById('logoutBtn').classList.add('inline-flex');
             updateTabVisibility();
             updateViewModeButton();
         }
@@ -390,12 +436,10 @@
         function showUserUI() {
             document.getElementById('adminBadge').classList.add('hidden');
             document.getElementById('userBadge').classList.remove('hidden');
-            document.getElementById('userBadge').classList.add('inline-block');
+            document.getElementById('userBadge').classList.add('inline-flex');
             document.getElementById('viewModeToggle').classList.add('hidden');
             document.getElementById('logoutBtn').classList.remove('hidden');
-            document.getElementById('logoutBtn').classList.add('inline-block');
-            document.querySelector('.tabs').classList.add('hidden');
-            
+            document.getElementById('logoutBtn').classList.add('inline-flex');
             updateTabVisibility();
         }
 
@@ -408,16 +452,13 @@
             // Update badges and UI based on view mode
             if (isAdminViewMode) {
                 document.getElementById('adminBadge').classList.remove('hidden');
-                document.getElementById('adminBadge').classList.add('inline-block');
+                document.getElementById('adminBadge').classList.add('inline-flex');
                 document.getElementById('userBadge').classList.add('hidden');
-                document.getElementById('userBadge').classList.remove('inline-block');
-                document.querySelector('.tabs').classList.remove('hidden');
-                document.querySelector('.tabs').classList.add('flex');
+                document.getElementById('userBadge').classList.remove('inline-flex');
             } else {
                 document.getElementById('adminBadge').classList.add('hidden');
                 document.getElementById('userBadge').classList.remove('hidden');
-                document.getElementById('userBadge').classList.add('inline-block');
-                document.querySelector('.tabs').classList.add('hidden');
+                document.getElementById('userBadge').classList.add('inline-flex');
             }
             
             updateTabVisibility();
@@ -1664,27 +1705,85 @@
 
         // Silver Catalog Functions
         let currentCatalogTables = [];
+        let currentCategoryFilter = 'all';
+
+        const TABLE_METADATA = {
+            dim_commune:               { category: 'geo',       label: 'Géographie',        color: '#10b981', bg: 'linear-gradient(135deg,#d1fae5,#a7f3d0)', iconColor: '#059669', type: 'Dimension'  },
+            fact_zone_attraction:      { category: 'geo',       label: 'Géographie',        color: '#10b981', bg: 'linear-gradient(135deg,#d1fae5,#a7f3d0)', iconColor: '#059669', type: 'Fait'       },
+            dim_gare:                  { category: 'transport', label: 'Transport',          color: '#8b5cf6', bg: 'linear-gradient(135deg,#ede9fe,#c4b5fd)', iconColor: '#7c3aed', type: 'Dimension'  },
+            dim_gare_segment:          { category: 'transport', label: 'Transport',          color: '#8b5cf6', bg: 'linear-gradient(135deg,#ede9fe,#c4b5fd)', iconColor: '#7c3aed', type: 'Dimension'  },
+            dim_ligne:                 { category: 'transport', label: 'Transport',          color: '#8b5cf6', bg: 'linear-gradient(135deg,#ede9fe,#c4b5fd)', iconColor: '#7c3aed', type: 'Dimension'  },
+            fact_loyer_annonce:        { category: 'logement',  label: 'Logement',           color: '#f59e0b', bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', iconColor: '#d97706', type: 'Fait'       },
+            fact_logement_social_rpls: { category: 'logement',  label: 'Logement',           color: '#f59e0b', bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', iconColor: '#d97706', type: 'Fait'       },
+            ref_logement_profil:       { category: 'logement',  label: 'Logement',           color: '#f59e0b', bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', iconColor: '#d97706', type: 'Référence'  },
+            dim_siae_structure:        { category: 'emploi',    label: 'Emploi & Insertion', color: '#3b82f6', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)', iconColor: '#2563eb', type: 'Dimension'  },
+            fact_siae_poste:           { category: 'emploi',    label: 'Emploi & Insertion', color: '#3b82f6', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)', iconColor: '#2563eb', type: 'Fait'       },
+            dim_accueillant:           { category: 'emploi',    label: 'Emploi & Insertion', color: '#3b82f6', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)', iconColor: '#2563eb', type: 'Dimension'  },
+        };
+
+        const DEFAULT_META = { category: 'other', label: 'Données', color: '#64748b', bg: 'linear-gradient(135deg,#f1f5f9,#e2e8f0)', iconColor: '#475569', type: 'Table' };
+
+        const CATEGORY_ICONS = {
+            geo: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>`,
+            transport: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="12" rx="3"/><circle cx="8.5" cy="18.5" r="1.5"/><circle cx="15.5" cy="18.5" r="1.5"/><line x1="7" y1="16" x2="5.5" y2="20"/><line x1="17" y1="16" x2="18.5" y2="20"/><line x1="9" y1="4" x2="9" y2="10"/><line x1="15" y1="4" x2="15" y2="10"/><line x1="4" y1="10" x2="20" y2="10"/></svg>`,
+            logement: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>`,
+            emploi: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+            other: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
+        };
+
+        function filterByCategory(cat) {
+            currentCategoryFilter = cat;
+            document.querySelectorAll('.category-pill').forEach(p => {
+                p.classList.toggle('active', p.dataset.category === cat);
+            });
+            filterCatalog();
+        }
         
         async function loadSilverCatalog() {
             try {
                 const gridDiv = document.getElementById('silver-catalog-grid');
-                gridDiv.innerHTML = '<p class="info-text">Chargement du catalogue...</p>';
-                
+                gridDiv.innerHTML = '<p class="info-text text-neutral-500 italic py-5 text-center col-span-full">Chargement du catalogue…</p>';
+
                 const response = await fetch(`${API_BASE}/api/data/catalog/silver`, {
                     headers: getHeaders()
                 });
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-                
+
                 const data = await response.json();
-                
+
                 // Store tables globally for filtering
                 currentCatalogTables = data.tables;
-                
-                // Clear search and render all tables
+
+                // Update hero stats
+                const totalRows = currentCatalogTables.reduce((sum, t) => sum + (t.row_count || 0), 0);
+                const certifiedCount = currentCatalogTables.filter(t => t.certified).length;
+                const statsEl = document.getElementById('marketplace-stats');
+                if (statsEl) {
+                    statsEl.innerHTML = `
+                        <span class="marketplace-stat-chip">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                            ${currentCatalogTables.length} jeux de données
+                        </span>
+                        <span class="marketplace-stat-chip">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            ${totalRows >= 1000000 ? (totalRows / 1000000).toFixed(1) + 'M' : totalRows.toLocaleString('fr-FR')} lignes
+                        </span>
+                        <span class="marketplace-stat-chip">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                            ${certifiedCount} certifiés
+                        </span>
+                    `;
+                }
+
+                // Clear search, reset category filter, and render
                 document.getElementById('catalog-search').value = '';
+                currentCategoryFilter = 'all';
+                document.querySelectorAll('.category-pill').forEach(p => {
+                    p.classList.toggle('active', p.dataset.category === 'all');
+                });
                 renderSilverCatalogCards(currentCatalogTables);
             } catch (error) {
                 showStatus('Erreur lors du chargement du catalogue: ' + error.message, 'error');
@@ -1695,25 +1794,29 @@
         
         function filterCatalog() {
             const searchTerm = document.getElementById('catalog-search').value.toLowerCase();
-            
-            if (!searchTerm) {
-                // No filter, show all tables
-                renderSilverCatalogCards(currentCatalogTables);
-                return;
+            let filtered = currentCatalogTables;
+
+            // Apply category filter
+            if (currentCategoryFilter !== 'all') {
+                filtered = filtered.filter(t => {
+                    const meta = TABLE_METADATA[t.name] || DEFAULT_META;
+                    return meta.category === currentCategoryFilter;
+                });
             }
-            
-            // Filter tables by name or description
-            const filteredTables = currentCatalogTables.filter(table => {
-                return table.name.toLowerCase().includes(searchTerm) ||
-                       (table.description_fr && table.description_fr.toLowerCase().includes(searchTerm));
-            });
-            
-            renderSilverCatalogCards(filteredTables);
-            
-            // Show count of filtered results
-            if (filteredTables.length === 0) {
+
+            // Apply search filter
+            if (searchTerm) {
+                filtered = filtered.filter(table =>
+                    table.name.toLowerCase().includes(searchTerm) ||
+                    (table.description_fr && table.description_fr.toLowerCase().includes(searchTerm))
+                );
+            }
+
+            renderSilverCatalogCards(filtered);
+
+            if (filtered.length === 0) {
                 const gridDiv = document.getElementById('silver-catalog-grid');
-                gridDiv.innerHTML = `<p class="info-text">Aucune table ne correspond à "${searchTerm}"</p>`;
+                gridDiv.innerHTML = `<p class="info-text text-neutral-500 italic py-5 text-center col-span-full">Aucune table ne correspond aux filtres sélectionnés</p>`;
             }
         }
         
@@ -1753,87 +1856,77 @@
         function renderSilverCatalogCards(tables) {
             const gridDiv = document.getElementById('silver-catalog-grid');
             gridDiv.innerHTML = '';
-            
+
             if (!tables || tables.length === 0) {
-                gridDiv.innerHTML = '<p class="info-text">Aucune table disponible</p>';
+                gridDiv.innerHTML = '<p class="info-text text-neutral-500 italic py-5 text-center col-span-full">Aucune table disponible</p>';
                 return;
             }
-            
-            // Sort tables: certified first, then alphabetically by name
+
+            // Sort: certified first, then alphabetically
             const sortedTables = [...tables].sort((a, b) => {
-                // First priority: certified tables on top
-                if (a.certified !== b.certified) {
-                    return b.certified ? 1 : -1;
-                }
-                // Second priority: alphabetical order
+                if (a.certified !== b.certified) return b.certified ? 1 : -1;
                 return a.name.localeCompare(b.name);
             });
-            
+
             sortedTables.forEach(table => {
+                const meta = TABLE_METADATA[table.name] || DEFAULT_META;
+                const icon = CATEGORY_ICONS[meta.category] || CATEGORY_ICONS.other;
+
                 const card = document.createElement('div');
-                card.className = 'pipeline-card catalog-card';
+                card.className = 'catalog-card';
                 card.onclick = () => showTableDetail(table.name);
-                
-                let dependenciesHtml = '';
-                if (table.dependencies && table.dependencies.length > 0) {
-                    dependenciesHtml = `
-                        <div class="card-dependencies">
-                            <small>Dépendances: ${table.dependencies.join(', ')}</small>
-                        </div>
-                    `;
-                }
-                
-                let metadataHtml = '';
-                if (table.row_count !== null && table.row_count !== undefined) {
-                    const queryCountBadge = table.query_count 
-                        ? `<span class="metadata-badge">${table.query_count.toLocaleString()} requêtes</span>`
-                        : '';
-                    
-                    metadataHtml = `
-                        <div class="card-metadata">
-                            <span class="metadata-badge">${table.row_count.toLocaleString()} lignes</span>
-                            <span class="metadata-badge">v${table.version}</span>
-                            ${queryCountBadge}
-                        </div>
-                    `;
-                }
-                
+
                 // Certification badge
-                const certBadge = table.certified 
+                const certBadge = table.certified
                     ? '<span class="cert-badge cert-badge-certified">✓ Certifiée</span>'
                     : '<span class="cert-badge cert-badge-uncertified">⚠ Non certifiée</span>';
-                
-                // Certification button (only for admins)
+
+                // Metadata badges
+                let metaBadgesHtml = '';
+                if (table.row_count !== null && table.row_count !== undefined) {
+                    const queryBadge = table.query_count
+                        ? `<span class="metadata-badge">${table.query_count.toLocaleString()} req.</span>`
+                        : '';
+                    metaBadgesHtml = `
+                        <span class="metadata-badge">${table.row_count.toLocaleString()} lignes</span>
+                        <span class="metadata-badge">v${table.version}</span>
+                        ${queryBadge}
+                    `;
+                }
+
+                // Category chip
+                const catChipStyle = `background:${meta.bg.replace('linear-gradient(135deg,','').split(',')[0].trim()}22;color:${meta.iconColor};border:1px solid ${meta.color}33;`;
+                const catChip = `<span class="cat-chip" style="${catChipStyle}">${meta.label}</span>`;
+
+                // Certification button (admins only)
                 let certButtonHtml = '';
                 if (isAdmin && isAdminViewMode) {
-                    if (table.certified) {
-                        certButtonHtml = `
-                            <button class="btn btn-small btn-secondary cert-button" onclick="uncertifyTable('${table.name}', event)">
-                                Retirer la certification
-                            </button>
-                        `;
-                    } else {
-                        certButtonHtml = `
-                            <button class="btn btn-small btn-primary cert-button" onclick="certifyTable('${table.name}', event)">
-                                Certifier
-                            </button>
-                        `;
-                    }
+                    certButtonHtml = table.certified
+                        ? `<button class="btn btn-small btn-secondary cert-button" onclick="uncertifyTable('${table.name}', event)">Retirer la certification</button>`
+                        : `<button class="btn btn-small btn-primary cert-button" onclick="certifyTable('${table.name}', event)">Certifier</button>`;
                 }
-                
+
                 card.innerHTML = `
-                    <div style="flex-grow: 1;">
+                    <div class="card-illus" style="background:${meta.bg}">
+                        <div class="card-illus-icon" style="color:${meta.iconColor}">${icon}</div>
+                        <span class="card-type-badge">${meta.type}</span>
+                    </div>
+                    <div class="card-body">
                         <div class="card-header-with-cert">
                             <h4>${table.name}</h4>
                             ${certBadge}
                         </div>
                         <p class="table-description-fr">${table.description_fr}</p>
-                        ${dependenciesHtml}
+                        <div class="card-footer">
+                            <div class="card-metadata">
+                                ${catChip}
+                                ${metaBadgesHtml}
+                            </div>
+                            ${certButtonHtml}
+                        </div>
                     </div>
-                    ${metadataHtml}
-                    ${certButtonHtml}
                 `;
-                
+
                 gridDiv.appendChild(card);
             });
         }
