@@ -189,11 +189,13 @@ class DeltaOperations:
         snapshot = table.current_snapshot()
         snapshot_id = snapshot.snapshot_id if snapshot else 0
 
-        try:
-            row_count = table.scan().to_arrow().num_rows
-        except Exception as e:
-            logger.warning("Could not get row count for %s: %s", table_path, e)
-            row_count = None
+        # Use snapshot summary statistics — no full table scan
+        row_count = None
+        if snapshot and snapshot.summary:
+            try:
+                row_count = int(snapshot.summary.get("total-records", 0)) or None
+            except (TypeError, ValueError):
+                pass
 
         return {
             "fields": fields,
@@ -216,8 +218,18 @@ class DeltaOperations:
             return DeltaOperations._preview_parquet(table_path, limit, filters, sort_by, sort_order)
 
         table = _load_iceberg_table(table_path)
-        df = table.scan().to_pandas()
-        total_rows = len(df)
+        # Count rows from snapshot stats — no full table scan
+        snapshot = table.current_snapshot()
+        total_rows = 0
+        if snapshot and snapshot.summary:
+            try:
+                total_rows = int(snapshot.summary.get("total-records", 0))
+            except (TypeError, ValueError):
+                pass
+
+        # Apply scan-level limit + filters via Iceberg expressions when possible
+        # (fallback: scan limited rows then filter in pandas)
+        df = table.scan(limit=limit * 10 if filters else limit).to_pandas()
 
         if filters:
             for spec in filters:
