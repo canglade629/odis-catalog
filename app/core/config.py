@@ -126,12 +126,12 @@ class Settings(BaseSettings):
 
     @property
     def bronze_path(self) -> str:
-        """Path to bronze (Delta) layer in S3."""
+        """Path to bronze (Iceberg) layer in S3."""
         return f"{self.s3_bucket_url}/bronze"
 
     @property
     def silver_path(self) -> str:
-        """Path to silver (Parquet) layer in S3."""
+        """Path to silver (Iceberg) layer in S3."""
         return f"{self.s3_bucket_url}/silver"
 
     @property
@@ -153,8 +153,8 @@ class Settings(BaseSettings):
         return f"{self.bronze_path}/{table}"
 
     def get_silver_path(self, table: str) -> str:
-        """Get path to silver table (Parquet file on S3)."""
-        return f"{self.silver_path}/{table}.parquet"
+        """Get path to silver Iceberg table on S3."""
+        return f"{self.silver_path}/{table}"
 
     def get_gold_path(self, table: str) -> str:
         """Get path to gold table."""

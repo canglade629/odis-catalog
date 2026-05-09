@@ -1,11 +1,12 @@
-"""Delta Lake and Parquet operations (S3/Scaleway)."""
+"""Iceberg and Parquet read operations for S3/Scaleway (catalogue web app — read-only)."""
+import decimal
 import io
+import json
 import logging
 from typing import Optional, List, Dict, Any
 
 import pandas as pd
 import pyarrow.parquet as pq
-from deltalake import DeltaTable, write_deltalake
 
 from app.core.config import get_settings
 from app.utils.s3_ops import get_s3_operations
@@ -13,14 +14,14 @@ from app.utils.s3_ops import get_s3_operations
 logger = logging.getLogger(__name__)
 
 
-def _s3_storage_options() -> Dict[str, str]:
-    """Build storage_options for deltalake when using S3 (Scaleway)."""
+def _s3_props() -> Dict[str, str]:
+    """Build PyIceberg S3 FileIO properties for Scaleway."""
     s = get_settings()
     return {
-        "AWS_ACCESS_KEY_ID": s.scw_access_key,
-        "AWS_SECRET_ACCESS_KEY": s.scw_secret_key,
-        "AWS_ENDPOINT_URL": s.scw_object_storage_endpoint,
-        "AWS_REGION": s.scw_region,
+        "s3.endpoint": s.scw_object_storage_endpoint,
+        "s3.access-key-id": s.scw_access_key,
+        "s3.secret-access-key": s.scw_secret_key,
+        "s3.region": s.scw_region,
     }
 
 
@@ -32,316 +33,241 @@ def _is_parquet_path(path: str) -> bool:
     return path.rstrip("/").endswith(".parquet")
 
 
+def _strip_s3_prefix(path: str, bucket: str) -> str:
+    """Return the key portion of an s3://bucket/key path."""
+    prefix = f"s3://{bucket}/"
+    return path[len(prefix):] if path.startswith(prefix) else path
+
+
+def _find_latest_metadata(table_path: str) -> Optional[str]:
+    """
+    Scan {table_path}/metadata/ on S3 and return the path of the most recent
+    *.metadata.json file.  Iceberg writes files as:
+      - v1.metadata.json, v2.metadata.json, … (sequential)
+      - or UUID-based names (fall back to last-modified / lexicographic sort)
+    """
+    s3 = get_s3_operations()
+    metadata_prefix = table_path.rstrip("/") + "/metadata/"
+    try:
+        files = s3.list_files(metadata_prefix)
+    except Exception as e:
+        logger.debug("No metadata dir at %s: %s", metadata_prefix, e)
+        return None
+
+    candidates = [f for f in files if f.endswith(".metadata.json")]
+    if not candidates:
+        return None
+
+    # Prefer vN.metadata.json; fall back to lexicographic (last = newest for UUIDs)
+    def _sort_key(path: str) -> tuple:
+        name = path.rsplit("/", 1)[-1]
+        if name.startswith("v") and name[1:].split(".")[0].isdigit():
+            return (1, int(name[1:].split(".")[0]))
+        return (0, name)
+
+    candidates.sort(key=_sort_key)
+    return candidates[-1]
+
+
+def _load_iceberg_table(table_path: str):
+    """Load a PyIceberg StaticTable from the latest metadata file."""
+    from pyiceberg.table import StaticTable
+
+    metadata_path = _find_latest_metadata(table_path)
+    if not metadata_path:
+        raise FileNotFoundError(f"No Iceberg metadata found at {table_path}/metadata/")
+
+    props = _s3_props()
+    return StaticTable.from_metadata(metadata_path, properties=props)
+
+
+def _sanitize_records(df: pd.DataFrame) -> List[Dict]:
+    """Convert a DataFrame to JSON-safe records (handle Decimal, datetime, dict)."""
+    df = df.copy()
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            df[col] = df[col].astype(str)
+        elif df[col].dtype == "object":
+            sample = df[col].iloc[0] if len(df) > 0 else None
+            if isinstance(sample, dict):
+                df[col] = df[col].apply(lambda x: json.dumps(x) if isinstance(x, dict) else x)
+            elif isinstance(sample, decimal.Decimal):
+                df[col] = df[col].apply(lambda x: float(x) if isinstance(x, decimal.Decimal) else x)
+    return df.to_dict(orient="records")
+
+
 class DeltaOperations:
-    """Helper class for Delta Lake operations."""
-    
+    """Read-only data operations for the catalogue web app (Iceberg + Parquet)."""
+
     @staticmethod
     def read_delta(table_path: str, columns: Optional[List[str]] = None) -> pd.DataFrame:
-        """
-        Read a Delta table into a pandas DataFrame (supports S3).
-        
-        Args:
-            table_path: Path to Delta table (s3://bucket/path)
-            columns: Optional list of columns to read
-            
-        Returns:
-            pandas DataFrame
-        """
-        logger.info("Reading Delta table from %s", table_path)
-        opts = _s3_storage_options() if _is_s3_path(table_path) else None
-        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
-        df = dt.to_pandas(columns=columns)
-        logger.info("Read %d rows from Delta table", len(df))
+        """Read an Iceberg table into a pandas DataFrame."""
+        logger.info("Reading Iceberg table from %s", table_path)
+        if _is_parquet_path(table_path):
+            return DeltaOperations.read_parquet(table_path)
+        table = _load_iceberg_table(table_path)
+        scan = table.scan(selected_fields=tuple(columns) if columns else None)
+        df = scan.to_pandas()
+        logger.info("Read %d rows from Iceberg table", len(df))
         return df
-    
-    @staticmethod
-    def write_delta(
-        df: pd.DataFrame,
-        table_path: str,
-        mode: str = "append",
-        partition_by: Optional[List[str]] = None,
-        schema_mode: str = "merge"
-    ) -> None:
-        """
-        Write a pandas DataFrame to a Delta table with schema evolution support.
-        
-        Args:
-            df: pandas DataFrame to write
-            table_path: Path to Delta table
-            mode: Write mode (append/overwrite)
-            partition_by: Optional list of columns to partition by
-            schema_mode: How to handle schema changes (merge/overwrite)
-        """
-        logger.info("Writing %d rows to Delta table at %s", len(df), table_path)
-        opts = _s3_storage_options() if _is_s3_path(table_path) else None
-        kw = {"storage_options": opts} if opts else {}
-        try:
-            write_deltalake(
-                table_path,
-                df,
-                mode=mode,
-                partition_by=partition_by,
-                schema_mode=schema_mode,
-                **kw,
-            )
-            logger.info(f"Successfully wrote to Delta table with schema_mode={schema_mode}")
-        except TypeError as e:
-            # If schema_mode not supported, fall back to basic write
-            if "schema_mode" in str(e):
-                logger.warning(f"schema_mode not supported, using basic write")
-                try:
-                    write_deltalake(
-                        table_path,
-                        df,
-                        mode=mode,
-                        partition_by=partition_by,
-                        **kw,
-                    )
-                    logger.info(f"Successfully wrote to Delta table")
-                except Exception as schema_error:
-                    error_msg = str(schema_error)
-                    logger.warning(f"Write failed with error: {type(schema_error).__name__}: {error_msg}")
-                    if "Schema of data does not match" in error_msg or "schema" in error_msg.lower():
-                        # Schema mismatch - need to delete table and recreate with new schema
-                        logger.warning(f"Schema mismatch detected, deleting old table and creating with new schema")
-                        try:
-                            dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
-                            logger.warning(f"Found existing table at version {dt.version()}, will replace with new schema")
-                        except Exception:
-                            logger.warning(f"No existing table found or couldn't load it")
-                        
-                        # Write with overwrite mode and schema_mode='overwrite' to force schema change
-                        write_deltalake(
-                            table_path,
-                            df,
-                            mode="overwrite",
-                            partition_by=partition_by,
-                            engine="rust",
-                            overwrite_schema=True,
-                            **kw,
-                        )
-                        logger.info("Successfully replaced Delta table with new schema")
-                    else:
-                        raise
-            else:
-                raise
-        except Exception as e:
-            error_msg = str(e)
-            logger.warning("Write failed at top level with error: %s: %s", type(e).__name__, error_msg)
-            if "Schema of data does not match" in error_msg or "schema" in error_msg.lower():
-                logger.warning("Schema mismatch detected, replacing table with new schema")
-                try:
-                    dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
-                    logger.warning(f"Found existing table at version {dt.version()}, will replace with new schema")
-                except Exception:
-                    logger.warning(f"No existing table found or couldn't load it")
-                
-                # Write with overwrite mode and overwrite_schema=True to force schema change
-                write_deltalake(
-                    table_path,
-                    df,
-                    mode="overwrite",
-                    partition_by=partition_by,
-                    engine="rust",
-                    overwrite_schema=True,
-                    **kw,
-                )
-                logger.info("Successfully replaced Delta table with new schema")
-            else:
-                raise
-    
+
     @staticmethod
     def table_exists(table_path: str) -> bool:
-        """
-        Check if a Delta table exists (S3 or local).
-        
-        Args:
-            table_path: Path to Delta table
-            
-        Returns:
-            True if table exists, False otherwise
-        """
-        try:
-            opts = _s3_storage_options() if _is_s3_path(table_path) else None
-            if opts:
-                DeltaTable(table_path, storage_options=opts)
-            else:
-                DeltaTable(table_path)
-            return True
-        except Exception:
-            return False
-    
-    @staticmethod
-    def get_table_info(table_path: str) -> Dict[str, Any]:
-        """
-        Get information about a Delta table (S3 or local).
-        
-        Args:
-            table_path: Path to Delta table
-            
-        Returns:
-            Dictionary with table information
-        """
-        opts = _s3_storage_options() if _is_s3_path(table_path) else None
-        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
-        schema = dt.schema()
-        
-        return {
-            "path": table_path,
-            "version": dt.version(),
-            "schema": schema.to_pydict(),
-            "files": dt.files()
-        }
-    
-    @staticmethod
-    def optimize_table(table_path: str) -> None:
-        """
-        Optimize a Delta table (compact small files).
-        
-        Args:
-            table_path: Path to Delta table
-        """
-        logger.info("Optimizing Delta table at %s", table_path)
-        opts = _s3_storage_options() if _is_s3_path(table_path) else None
-        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
-        # Note: optimize and vacuum are not yet available in deltalake Python
-        # This is a placeholder for future implementation
-        logger.warning("Table optimization not yet implemented in deltalake Python")
-    
-    @staticmethod
-    def merge_delta(
-        target_path: str,
-        source_df: pd.DataFrame,
-        merge_keys: List[str],
-        update_cols: Optional[List[str]] = None,
-        insert_cols: Optional[List[str]] = None
-    ) -> Dict[str, int]:
-        """
-        Perform a merge (upsert) operation on a Delta table.
-        
-        This is a simplified merge that:
-        1. Reads the target table
-        2. Performs the merge in pandas
-        3. Writes back with overwrite mode
-        
-        Args:
-            target_path: Path to target Delta table
-            source_df: Source DataFrame to merge
-            merge_keys: Columns to use for matching
-            update_cols: Columns to update on match (None = all)
-            insert_cols: Columns to insert on no match (None = all)
-            
-        Returns:
-            Dictionary with merge statistics
-        """
-        logger.info(f"Performing merge on Delta table at {target_path}")
-        
-        # Read target table if it exists
-        if DeltaOperations.table_exists(target_path):
-            target_df = DeltaOperations.read_delta(target_path)
-            
-            # Perform merge logic
-            # Find matching rows
-            merge_result = target_df.merge(
-                source_df[merge_keys],
-                on=merge_keys,
-                how='outer',
-                indicator=True
-            )
-            
-            # Count operations
-            updates = (merge_result['_merge'] == 'both').sum()
-            inserts = (merge_result['_merge'] == 'right_only').sum()
-            
-            # Perform the actual merge
-            # Remove rows from target that match
-            non_matching = target_df[~target_df[merge_keys[0]].isin(source_df[merge_keys[0]])]
-            # Combine with source (which includes updates and inserts)
-            result_df = pd.concat([non_matching, source_df], ignore_index=True)
-            
-            stats = {"updated": updates, "inserted": inserts, "deleted": 0}
-        else:
-            # Table doesn't exist, just insert all
-            result_df = source_df
-            stats = {"updated": 0, "inserted": len(source_df), "deleted": 0}
-        
-        # Write the result
-        DeltaOperations.write_delta(result_df, target_path, mode="overwrite")
-        
-        logger.info(f"Merge complete: {stats}")
-        return stats
-    
+        """Return True if an Iceberg table (metadata dir) exists at the given path."""
+        if _is_parquet_path(table_path):
+            try:
+                s3 = get_s3_operations()
+                s3.download_file(table_path)
+                return True
+            except Exception:
+                return False
+        return _find_latest_metadata(table_path) is not None
+
     @staticmethod
     def list_delta_tables(base_path: str) -> List[Dict[str, Any]]:
         """
-        List all Delta tables under a given base path (S3).
-        
-        Args:
-            base_path: Base path to scan (e.g. s3://bucket/bronze)
-            
-        Returns:
-            List of dictionaries with table information
+        List all Iceberg tables under base_path by scanning for metadata/ directories.
+        Returns [{name, path, snapshot_id}].
         """
-        logger.info("Scanning for Delta tables in %s", base_path)
+        logger.info("Scanning for Iceberg tables in %s", base_path)
         s3 = get_s3_operations()
-        all_files = s3.list_files(base_path)
-        delta_tables = set()
-        for full_path in all_files:
-            key = full_path.split("/", 3)[-1] if full_path.startswith("s3://") else full_path
-            if "_delta_log/" in key:
-                table_path = key.split("_delta_log/")[0].rstrip("/")
-                delta_tables.add(table_path)
         settings = get_settings()
         bucket = settings.scw_bucket_name
+
+        try:
+            all_files = s3.list_files(base_path)
+        except Exception as e:
+            logger.warning("Could not list files at %s: %s", base_path, e)
+            return []
+
+        # Detect table roots: any path containing /metadata/*.metadata.json
+        table_roots: set = set()
+        for full_path in all_files:
+            if "/metadata/" in full_path and full_path.endswith(".metadata.json"):
+                # e.g. s3://bucket/bronze/my_table/metadata/v1.metadata.json
+                root = full_path.split("/metadata/")[0]
+                table_roots.add(root)
+
         tables = []
-        opts = _s3_storage_options()
-        for table_path in sorted(delta_tables):
-            full_path = f"s3://{bucket}/{table_path}"
-            table_name = table_path.split("/")[-1]
+        for root in sorted(table_roots):
+            table_name = root.rstrip("/").rsplit("/", 1)[-1]
+            # Normalise to s3://bucket/... path
+            if not root.startswith("s3://"):
+                root = f"s3://{bucket}/{root}"
             try:
-                dt = DeltaTable(full_path, storage_options=opts)
-                tables.append({
-                    "name": table_name,
-                    "path": full_path,
-                    "version": dt.version(),
-                })
+                table = _load_iceberg_table(root)
+                snapshot_id = table.current_snapshot().snapshot_id if table.current_snapshot() else None
+                tables.append({"name": table_name, "path": root, "snapshot_id": snapshot_id})
             except Exception as e:
-                logger.warning("Could not read Delta table at %s: %s", full_path, e)
-        logger.info("Found %d Delta tables", len(tables))
+                logger.warning("Could not load Iceberg table at %s: %s", root, e)
+
+        logger.info("Found %d Iceberg tables", len(tables))
         return tables
-    
+
     @staticmethod
     def get_table_schema(table_path: str) -> Dict[str, Any]:
         """
-        Get schema for a Delta table or a single Parquet file (S3 silver).
-        
-        Args:
-            table_path: Path to Delta table or s3://.../table.parquet
-            
-        Returns:
-            Dictionary with fields, version, row_count, num_fields
+        Return schema info for an Iceberg table or a single Parquet file.
+        Schema format: {fields: [{name, type, nullable}], version, row_count, num_fields}
         """
         logger.info("Getting schema for %s", table_path)
         if _is_parquet_path(table_path):
             return DeltaOperations._get_parquet_schema(table_path)
-        opts = _s3_storage_options() if _is_s3_path(table_path) else None
-        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
-        arrow_schema = dt.schema().to_pyarrow()
+
+        table = _load_iceberg_table(table_path)
+        schema = table.schema()
         fields = [
-            {"name": f.name, "type": str(f.type), "nullable": f.nullable}
-            for f in arrow_schema
+            {
+                "name": field.name,
+                "type": str(field.field_type),
+                "nullable": field.optional,
+            }
+            for field in schema.fields
         ]
+        snapshot = table.current_snapshot()
+        snapshot_id = snapshot.snapshot_id if snapshot else 0
+
         try:
-            row_count = len(dt.to_pandas())
+            row_count = table.scan().to_arrow().num_rows
         except Exception as e:
-            logger.warning("Could not get row count: %s", e)
+            logger.warning("Could not get row count for %s: %s", table_path, e)
             row_count = None
+
         return {
             "fields": fields,
-            "version": dt.version(),
+            "version": snapshot_id,
             "row_count": row_count,
             "num_fields": len(fields),
         }
+
+    @staticmethod
+    def preview_table(
+        table_path: str,
+        limit: int = 100,
+        filters: Optional[List[Dict[str, str]]] = None,
+        sort_by: Optional[str] = None,
+        sort_order: str = "asc",
+    ) -> Dict[str, Any]:
+        """Get a preview of an Iceberg table with optional filtering and sorting."""
+        logger.info("Previewing table %s (limit=%s)", table_path, limit)
+        if _is_parquet_path(table_path):
+            return DeltaOperations._preview_parquet(table_path, limit, filters, sort_by, sort_order)
+
+        table = _load_iceberg_table(table_path)
+        df = table.scan().to_pandas()
+        total_rows = len(df)
+
+        if filters:
+            for spec in filters:
+                col = spec.get("column")
+                op = spec.get("operator", "=")
+                val = spec.get("value")
+                if col and col in df.columns:
+                    try:
+                        if op == "=":
+                            df = df[df[col] == val]
+                        elif op == "!=":
+                            df = df[df[col] != val]
+                        elif op == "contains":
+                            df = df[df[col].astype(str).str.contains(str(val), case=False, na=False)]
+                        elif op == ">":
+                            df = df[df[col] > float(val)]
+                        elif op == "<":
+                            df = df[df[col] < float(val)]
+                        elif op == ">=":
+                            df = df[df[col] >= float(val)]
+                        elif op == "<=":
+                            df = df[df[col] <= float(val)]
+                    except Exception as e:
+                        logger.warning("Filter failed for %s %s %s: %s", col, op, val, e)
+
+        filtered_rows = len(df)
+
+        if sort_by and sort_by in df.columns:
+            df = df.sort_values(by=sort_by, ascending=(sort_order.lower() == "asc"))
+
+        df_preview = df.head(limit)
+        records = _sanitize_records(df_preview)
+
+        return {
+            "columns": list(df_preview.columns),
+            "data": records,
+            "total_rows": total_rows,
+            "filtered_rows": filtered_rows,
+            "preview_rows": len(records),
+        }
+
+    # ------------------------------------------------------------------
+    # Parquet helpers (legacy / single-file fallback)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def read_parquet(table_path: str) -> pd.DataFrame:
+        """Read a single Parquet file from S3 into a pandas DataFrame."""
+        s3 = get_s3_operations()
+        content = s3.download_file(table_path)
+        table = pq.read_table(io.BytesIO(content))
+        return table.to_pandas()
 
     @staticmethod
     def _get_parquet_schema(table_path: str) -> Dict[str, Any]:
@@ -362,14 +288,6 @@ class DeltaOperations:
         }
 
     @staticmethod
-    def read_parquet(table_path: str) -> pd.DataFrame:
-        """Read a Parquet file from S3 into a pandas DataFrame."""
-        s3 = get_s3_operations()
-        content = s3.download_file(table_path)
-        table = pq.read_table(io.BytesIO(content))
-        return table.to_pandas()
-
-    @staticmethod
     def _preview_parquet(
         table_path: str,
         limit: int,
@@ -380,52 +298,41 @@ class DeltaOperations:
         """Preview a single Parquet file on S3."""
         s3 = get_s3_operations()
         content = s3.download_file(table_path)
-        table = pq.read_table(io.BytesIO(content))
-        df = table.to_pandas()
+        tbl = pq.read_table(io.BytesIO(content))
+        df = tbl.to_pandas()
         total_rows = len(df)
+
         if filters:
-            for filter_spec in filters:
-                column = filter_spec.get("column")
-                operator = filter_spec.get("operator", "=")
-                value = filter_spec.get("value")
-                if column and column in df.columns:
+            for spec in filters:
+                col = spec.get("column")
+                op = spec.get("operator", "=")
+                val = spec.get("value")
+                if col and col in df.columns:
                     try:
-                        if operator == "=":
-                            df = df[df[column] == value]
-                        elif operator == "!=":
-                            df = df[df[column] != value]
-                        elif operator == "contains":
-                            df = df[df[column].astype(str).str.contains(str(value), case=False, na=False)]
-                        elif operator == ">":
-                            df = df[df[column] > float(value)]
-                        elif operator == "<":
-                            df = df[df[column] < float(value)]
-                        elif operator == ">=":
-                            df = df[df[column] >= float(value)]
-                        elif operator == "<=":
-                            df = df[df[column] <= float(value)]
+                        if op == "=":
+                            df = df[df[col] == val]
+                        elif op == "!=":
+                            df = df[df[col] != val]
+                        elif op == "contains":
+                            df = df[df[col].astype(str).str.contains(str(val), case=False, na=False)]
+                        elif op == ">":
+                            df = df[df[col] > float(val)]
+                        elif op == "<":
+                            df = df[df[col] < float(val)]
+                        elif op == ">=":
+                            df = df[df[col] >= float(val)]
+                        elif op == "<=":
+                            df = df[df[col] <= float(val)]
                     except Exception as e:
-                        logger.warning("Filter failed for %s %s %s: %s", column, operator, value, e)
+                        logger.warning("Filter failed for %s %s %s: %s", col, op, val, e)
+
         filtered_rows = len(df)
         if sort_by and sort_by in df.columns:
             df = df.sort_values(by=sort_by, ascending=(sort_order.lower() == "asc"))
-        df_preview = df.head(limit).copy()
-        import decimal as _decimal
-        for col in df_preview.columns:
-            if pd.api.types.is_datetime64_any_dtype(df_preview[col]):
-                df_preview[col] = df_preview[col].astype(str)
-            elif df_preview[col].dtype == "object":
-                sample = df_preview[col].iloc[0] if len(df_preview) > 0 else None
-                if isinstance(sample, dict):
-                    import json
-                    df_preview[col] = df_preview[col].apply(
-                        lambda x: json.dumps(x) if isinstance(x, dict) else x
-                    )
-                elif isinstance(sample, _decimal.Decimal):
-                    df_preview[col] = df_preview[col].apply(
-                        lambda x: float(x) if isinstance(x, _decimal.Decimal) else x
-                    )
-        records = df_preview.to_dict(orient="records")
+
+        df_preview = df.head(limit)
+        records = _sanitize_records(df_preview)
+
         return {
             "columns": list(df_preview.columns),
             "data": records,
@@ -434,101 +341,7 @@ class DeltaOperations:
             "preview_rows": len(records),
         }
 
-    @staticmethod
-    def preview_table(
-        table_path: str,
-        limit: int = 100,
-        filters: Optional[List[Dict[str, str]]] = None,
-        sort_by: Optional[str] = None,
-        sort_order: str = "asc"
-    ) -> Dict[str, Any]:
-        """
-        Get a preview of table data with optional filtering and sorting.
-        
-        Args:
-            table_path: Path to Delta table
-            limit: Maximum number of rows to return
-            filters: List of filter dictionaries with 'column', 'operator', 'value'
-            sort_by: Column to sort by
-            sort_order: Sort order ('asc' or 'desc')
-            
-        Returns:
-            Dictionary with preview data and metadata
-        """
-        logger.info("Previewing table %s (limit=%s)", table_path, limit)
-        if _is_parquet_path(table_path):
-            return DeltaOperations._preview_parquet(table_path, limit, filters, sort_by, sort_order)
-        opts = _s3_storage_options() if _is_s3_path(table_path) else None
-        dt = DeltaTable(table_path, storage_options=opts) if opts else DeltaTable(table_path)
-        df = dt.to_pandas()
-        total_rows = len(df)
-        
-        # Apply filters if provided
-        if filters:
-            for filter_spec in filters:
-                column = filter_spec.get("column")
-                operator = filter_spec.get("operator", "=")
-                value = filter_spec.get("value")
-                
-                if column and column in df.columns:
-                    try:
-                        if operator == "=":
-                            df = df[df[column] == value]
-                        elif operator == "!=":
-                            df = df[df[column] != value]
-                        elif operator == "contains":
-                            df = df[df[column].astype(str).str.contains(value, case=False, na=False)]
-                        elif operator == ">":
-                            df = df[df[column] > float(value)]
-                        elif operator == "<":
-                            df = df[df[column] < float(value)]
-                        elif operator == ">=":
-                            df = df[df[column] >= float(value)]
-                        elif operator == "<=":
-                            df = df[df[column] <= float(value)]
-                    except Exception as e:
-                        logger.warning(f"Filter failed for {column} {operator} {value}: {e}")
-        
-        filtered_rows = len(df)
-        
-        # Apply sorting if provided
-        if sort_by and sort_by in df.columns:
-            ascending = (sort_order.lower() == "asc")
-            df = df.sort_values(by=sort_by, ascending=ascending)
-        
-        # Limit rows
-        df_preview = df.head(limit)
-        
-        # Convert to records for JSON serialization
-        # Handle datetime and other special types
-        import decimal as _decimal
-        df_preview = df_preview.copy()
-        for col in df_preview.columns:
-            if pd.api.types.is_datetime64_any_dtype(df_preview[col]):
-                df_preview[col] = df_preview[col].astype(str)
-            # Convert dict/struct columns to JSON strings for display
-            elif df_preview[col].dtype == 'object':
-                # Check if the column contains dicts or Decimals
-                sample = df_preview[col].iloc[0] if len(df_preview) > 0 else None
-                if isinstance(sample, dict):
-                    import json
-                    df_preview[col] = df_preview[col].apply(lambda x: json.dumps(x) if isinstance(x, dict) else x)
-                elif isinstance(sample, _decimal.Decimal):
-                    df_preview[col] = df_preview[col].apply(lambda x: float(x) if isinstance(x, _decimal.Decimal) else x)
-        
-        records = df_preview.to_dict(orient="records")
-        columns = list(df_preview.columns)
-        
-        return {
-            "columns": columns,
-            "data": records,
-            "total_rows": total_rows,
-            "filtered_rows": filtered_rows,
-            "preview_rows": len(records)
-        }
-
 
 def get_delta_operations() -> DeltaOperations:
-    """Get Delta operations instance."""
+    """Return the DeltaOperations helper (kept for backward compat)."""
     return DeltaOperations()
-
