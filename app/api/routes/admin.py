@@ -295,74 +295,55 @@ async def refresh_catalogue(
     user_id: str = Depends(verify_api_key_or_admin),
     session: AsyncSession = Depends(get_db),
 ):
-    """Refresh the data catalogue in PostgreSQL from YAML (enriched with S3 schema/preview)."""
+    """Merge YAML descriptions with pipeline-written schema/preview from PostgreSQL.
+
+    Zero S3 reads — the pipeline project is responsible for writing schema,
+    preview and row_count to the data_catalogue table after each dbt run.
+    This endpoint simply overlays the human-authored YAML documentation on top
+    of that data and persists the merged document.
+    """
     try:
         import yaml
         from datetime import datetime, timezone
-        from app.core.config import get_settings
-        from app.utils.delta_ops import DeltaOperations
-        
-        settings = get_settings()
-        
-        # Find catalogue file
+
+        # Locate data_catalogue.yaml
         possible_paths = [
             Path(__file__).parent.parent.parent / "config" / "data_catalogue.yaml",
             Path("/app/config/data_catalogue.yaml"),
             Path("config/data_catalogue.yaml"),
         ]
-        
-        catalogue_path = None
-        for path in possible_paths:
-            if path.exists():
-                catalogue_path = path
-                break
-        
+        catalogue_path = next((p for p in possible_paths if p.exists()), None)
         if not catalogue_path:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Catalogue file not found in any of: {[str(p) for p in possible_paths]}"
             )
-        
-        # Load YAML
-        logger.info(f"Loading catalogue from {catalogue_path}")
-        with open(catalogue_path, 'r', encoding='utf-8') as f:
+
+        logger.info("Loading catalogue from %s", catalogue_path)
+        with open(catalogue_path, "r", encoding="utf-8") as f:
             catalogue_data = yaml.safe_load(f)
-        
-        # Enrich with Delta table metadata (schema + preview)
-        tables_data = catalogue_data.get('tables', {})
+        yaml_tables = catalogue_data.get("tables", {})
+
+        # Read existing document written by the pipeline project
+        existing_doc = await catalogue_repo.get(session)
+        pipeline_tables = existing_doc.get("tables", {}) if existing_doc else {}
+
+        # Merge: YAML is the base (descriptions, examples); pipeline provides
+        # the live schema, preview and row_count
         enriched_tables = {}
-        
-        for table_name, table_info in tables_data.items():
-            enriched_table = dict(table_info)
-            
-            try:
-                # Get schema from Delta table
-                table_path = settings.get_silver_path(table_name)
-                schema_info = DeltaOperations.get_table_schema(table_path)
-                
-                enriched_table['schema'] = {
-                    'fields': schema_info['fields'],
-                    'version': schema_info['version'],
-                    'num_fields': schema_info['num_fields']
-                }
-                
-                # Get preview data (first 10 rows)
-                preview_data = DeltaOperations.preview_table(
-                    table_path=table_path,
-                    limit=10,
-                    filters=None,
-                    sort_by=None,
-                    sort_order="asc"
-                )
-                enriched_table['preview'] = preview_data['data']
-                
-                logger.info(f"Enriched {table_name} with schema and preview")
-            except Exception as e:
-                logger.warning(f"Could not enrich {table_name}: {e}")
-                # Keep original table info without enrichment
-            
-            enriched_tables[table_name] = enriched_table
-        
+        for table_name, yaml_info in yaml_tables.items():
+            enriched = dict(yaml_info)
+            pipeline = pipeline_tables.get(table_name, {})
+
+            if "schema" in pipeline:
+                enriched["schema"] = pipeline["schema"]
+            if "preview" in pipeline:
+                enriched["preview"] = pipeline["preview"]
+            if pipeline.get("row_count"):
+                enriched["row_count"] = pipeline["row_count"]
+
+            enriched_tables[table_name] = enriched
+
         sync_time = datetime.now(timezone.utc)
         document = {
             "tables": enriched_tables,
@@ -373,22 +354,21 @@ async def refresh_catalogue(
             "enriched": True,
         }
         await catalogue_repo.set(session, document)
+
         num_tables = len(enriched_tables)
-        logger.info("Synced %d enriched tables to DB at %s", num_tables, sync_time.isoformat())
-        
-        result = {
-            'status': 'success',
-            'tables_synced': num_tables,
-            'last_synced': sync_time.isoformat(),
-            'version': catalogue_data.get('version', 'unknown')
-        }
-        
-        return CatalogueRefreshResponse(**result)
-    
+        logger.info("Merged %d tables from YAML + pipeline data at %s", num_tables, sync_time.isoformat())
+
+        return CatalogueRefreshResponse(
+            status="success",
+            tables_synced=num_tables,
+            last_synced=sync_time.isoformat(),
+            version=catalogue_data.get("version", "unknown"),
+        )
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to refresh catalogue: {e}", exc_info=True)
+        logger.error("Failed to refresh catalogue: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to refresh catalogue: {str(e)}"
