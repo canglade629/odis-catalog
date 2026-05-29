@@ -271,44 +271,34 @@ async def get_silver_catalog(
     Reads entirely from PostgreSQL catalogue cache for maximum speed.
     """
     logger.info("Fetching silver catalog with French descriptions")
-    config_loader = get_config_loader()
 
     try:
         # Import query tracker
         from app.utils.query_tracker import get_table_query_count
 
-        # Load catalogue from PostgreSQL (fast!)
+        # Load catalogue from PostgreSQL — single source of truth (written by dbt)
         catalogue = await load_catalogue_from_db(session)
         catalogue_tables = catalogue.get('tables', {})
 
-        # Silver table list from config (DBT-managed; not in app registry)
-        silver_configs = config_loader.load_layer_config("silver")
-
         tables = []
-        for pipeline in silver_configs:
-            # Pipeline name is now the same as the table name (dim_*, fact_*)
-            table_name = pipeline.name
-
-            # Get all metadata from cached catalogue (no S3 calls)
-            catalogue_info = catalogue_tables.get(table_name, {})
+        for table_name, catalogue_info in sorted(catalogue_tables.items()):
             row_count = catalogue_info.get("row_count")
             version = catalogue_info.get("schema", {}).get("version", 0)
-            
+
             # Get certification status from PostgreSQL (fast)
             cert_status = await get_certification_status("silver", table_name, session)
-            
+
             # Get query count from PostgreSQL
             query_count = await get_table_query_count(session, f"silver_{table_name}")
-            
+
             tables.append(SilverTableInfo(
                 name=table_name,
                 actual_table_name=table_name,
                 description_fr=(
                     catalogue_info.get("description")
-                    or pipeline.description_fr
                     or "Description non disponible"
                 ),
-                dependencies=catalogue_info.get("upstream_models") or pipeline.dependencies or [],
+                dependencies=catalogue_info.get("upstream_models") or [],
                 version=version,
                 row_count=row_count,
                 certified=cert_status is not None and cert_status.get("certified", False),
@@ -316,7 +306,7 @@ async def get_silver_catalog(
                 certified_by=cert_status.get("certified_by") if cert_status else None,
                 query_count=query_count
             ))
-        
+
         return SilverCatalogResponse(tables=tables)
     
     except Exception as e:
@@ -342,21 +332,14 @@ async def get_silver_table_detail(
         table_name: Name of the silver table
     """
     logger.info(f"Fetching details for silver.{table_name}")
-    config_loader = get_config_loader()
 
     try:
-        silver_configs = config_loader.load_layer_config("silver")
-        pipeline_info = next((p for p in silver_configs if p.name == table_name), None)
-
-        if not pipeline_info:
-            raise HTTPException(status_code=404, detail=f"Table {table_name} not found")
-        
         # Load enriched catalogue from PostgreSQL (includes schema + preview)
         catalogue = await load_catalogue_from_db(session)
         logger.info(f"Loaded enriched catalogue from PostgreSQL with {len(catalogue.get('tables', {}))} tables")
-        
-        table_catalogue = catalogue.get("tables", {}).get(table_name, {})
-        
+
+        table_catalogue = catalogue.get("tables", {}).get(table_name)
+
         if not table_catalogue:
             raise HTTPException(status_code=404, detail=f"Table {table_name} not found in catalogue")
         
@@ -395,10 +378,9 @@ async def get_silver_table_detail(
             name=table_name,
             description_fr=(
                 table_catalogue.get("description")
-                or pipeline_info.description_fr
                 or "Description non disponible"
             ),
-            dependencies=table_catalogue.get("upstream_models") or pipeline_info.dependencies or [],
+            dependencies=table_catalogue.get("upstream_models") or [],
             tags=table_catalogue.get("tags") or [],
             upstream_models=table_catalogue.get("upstream_models") or [],
             table_schema=table_schema,
@@ -576,11 +558,13 @@ async def refresh_catalogue(
     user_id: str = Depends(verify_api_key_or_admin),
     session: AsyncSession = Depends(get_db)
 ):
-    """Stamp last_synced on the pipeline-written catalogue document in PostgreSQL.
+    """Reload the silver catalogue from the PostgreSQL data_catalogue document.
 
     The pipeline project (dbt + manifest loader) is the single source of truth —
     it writes descriptions, tags, schema, preview and row_count after each run.
-    This endpoint just reads that document, updates last_synced, and writes it back.
+    This endpoint reads the current document, stamps last_synced, and returns the
+    number of tables now visible in the catalogue. The updated count is immediately
+    reflected in GET /catalog/silver since that endpoint reads directly from Postgres.
     No S3 reads, no YAML reads. Completes in < 1 s.
     """
     try:
