@@ -488,6 +488,23 @@
     background: #0f172a; border-color: #0f172a; color: white;
     font-weight: 600; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
 }
+.pill-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.15);
+    color: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+}
+.category-pill.active .pill-count {
+    background: rgba(255,255,255,0.2);
+}
 /* All active category pills use the same neutral dark — no per-category color overrides */
 
 /* Marketplace catalog cards (overrides old .catalog-card) */

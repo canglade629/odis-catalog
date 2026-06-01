@@ -12,6 +12,7 @@ tables:
   # ============================================================================
   
   dim_commune:
+    category: "geo"
     description: "Table de dimension des communes françaises avec codes INSEE, départements et régions. Master Data Management (MDM) pour toutes les jointures géographiques."
     row_count: 34935
     fields:
@@ -53,6 +54,7 @@ tables:
 
 
   ref_logement_profil:
+    category: "logement"
     description: "Table de référence des profils de biens immobiliers (type, typologie, surfaces) pour les données 2024. Utilisée pour jointure via logement_profil_sk."
     row_count: 4
     fields:
@@ -106,6 +108,7 @@ tables:
 
 
   dim_accueillant:
+    category: "emploi"
     description: "Table de dimension des structures d'accueil avec enrichissement géographique (FK vers dim_commune) et coordonnées GPS."
     row_count: 1293
     fields:
@@ -147,6 +150,7 @@ tables:
 
 
   dim_gare_segment:
+    category: "transport"
     description: "Table de référence des segments de gares (A=National, B=Régional, C=Local). Table hardcodée avec 3 lignes."
     row_count: 3
     fields:
@@ -182,6 +186,7 @@ tables:
 
 
   dim_gare:
+    category: "transport"
     description: "Table de dimension des gares voyageurs avec enrichissement géographique (FK vers dim_commune et dim_gare_segment) et coordonnées GPS."
     row_count: 2785
     fields:
@@ -235,6 +240,7 @@ tables:
 
 
   dim_ligne:
+    category: "transport"
     description: "Table de dimension des lignes ferroviaires avec catégories (TGV/non-TGV) et coordonnées géographiques."
     row_count: 933
     fields:
@@ -276,6 +282,7 @@ tables:
 
 
   dim_siae_structure:
+    category: "emploi"
     description: "Table de dimension des structures d'insertion par l'activité économique (SIAE) avec enrichissement géographique (FK vers dim_commune) et informations de contact."
     row_count: 86374
     fields:
@@ -361,6 +368,7 @@ tables:
   # ============================================================================
   
   fact_loyer_annonce:
+    category: "logement"
     description: "Table de faits des loyers d'annonce au m² par commune avec bornes de prédiction, niveau d'observation et indicateurs de qualité. FK vers dim_commune et ref_logement_profil."
     row_count: 139672
     fields:
@@ -428,6 +436,7 @@ tables:
 
 
   fact_zone_attraction:
+    category: "geo"
     description: "Table de faits des zones d'attraction des villes 2020 avec FKs vers communes (commune et pôle) et catégories d'attraction."
     row_count: 26209
     fields:
@@ -469,6 +478,7 @@ tables:
 
 
   fact_siae_poste:
+    category: "emploi"
     description: "Table de faits des postes ouverts en SIAE avec codes ROME, types de contrats et disponibilité. FK vers dim_siae_structure."
     row_count: 4294
     fields:
@@ -557,6 +567,7 @@ tables:
         example: '{"job_insert_id": "fact_siae_poste", "job_insert_date_utc": "2025-12-03T17:27:10.044Z", "job_modify_id": "fact_siae_poste", "job_modify_date_utc": "2025-12-03T17:27:10.044Z", "ingestion_timestamp": "2025-12-03T15:00:00.000Z"}'
 
   fact_logement_social_rpls:
+    category: "logement"
     description: "Table de faits des statistiques sur le parc locatif social (Répertoire des logements locatifs des bailleurs sociaux - RPLS) à la maille commune et millésime annuel. Clé composite (commune_sk, annee). FK vers dim_commune."
     row_count: 0
     fields:

@@ -1889,14 +1889,15 @@
             const UNCERT_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
 
             const sorted = [...tables].sort((a, b) => {
-                const ma = TABLE_METADATA[a.name] || DEFAULT_META;
-                const mb = TABLE_METADATA[b.name] || DEFAULT_META;
-                if (ma.category !== mb.category) return ma.category.localeCompare(mb.category);
+                const ca = getTableCategory(a);
+                const cb = getTableCategory(b);
+                if (ca !== cb) return ca.localeCompare(cb);
                 return a.name.localeCompare(b.name);
             });
 
             tbody.innerHTML = sorted.map(t => {
                 const meta = TABLE_METADATA[t.name] || DEFAULT_META;
+                const category = getTableCategory(t);
                 const rowStr = t.row_count != null ? t.row_count.toLocaleString('fr-FR') : '—';
                 const qStr = t.query_count ? t.query_count.toLocaleString('fr-FR') : '—';
                 const yearHtml = t.annee_reference
@@ -1907,7 +1908,7 @@
                     : `<span class="overview-cert-badge pending">${UNCERT_ICON} En attente</span>`;
                 return `<tr onclick="showTableDetail('${t.name}')" style="cursor:pointer">
                     <td><code class="overview-table-name">${t.name}</code></td>
-                    <td><span class="overview-cat-label">${meta.label}</span></td>
+                    <td><span class="overview-cat-label">${getCategoryLabel(category)}</span></td>
                     <td><span class="overview-type-badge type-${meta.type.toLowerCase().replace(/[^a-z]/g,'')}">${meta.type}</span></td>
                     <td>${yearHtml}</td>
                     <td class="overview-num">${rowStr}</td>
@@ -1938,6 +1939,25 @@
 
         const DEFAULT_META = { category: 'other', label: 'Données', color: '#64748b', bg: 'linear-gradient(135deg,#f1f5f9,#e2e8f0)', iconColor: '#475569', type: 'Table' };
 
+        // Display labels for known category keys (fallback for unknown: capitalised key)
+        const CATEGORY_LABELS = {
+            geo:       'Géographie',
+            logement:  'Logement',
+            transport: 'Transport',
+            emploi:    'Emploi & Insertion',
+            other:     'Autres',
+        };
+
+        // Return the category of a table — API value first, then TABLE_METADATA fallback
+        function getTableCategory(table) {
+            return table.category || (TABLE_METADATA[table.name] || DEFAULT_META).category;
+        }
+
+        // Return the display label for a category key
+        function getCategoryLabel(cat) {
+            return CATEGORY_LABELS[cat] || (cat ? cat.charAt(0).toUpperCase() + cat.slice(1) : 'Données');
+        }
+
         const CATEGORY_ICONS = {
             geo: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>`,
             transport: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="12" rx="3"/><circle cx="8.5" cy="18.5" r="1.5"/><circle cx="15.5" cy="18.5" r="1.5"/><line x1="7" y1="16" x2="5.5" y2="20"/><line x1="17" y1="16" x2="18.5" y2="20"/><line x1="9" y1="4" x2="9" y2="10"/><line x1="15" y1="4" x2="15" y2="10"/><line x1="4" y1="10" x2="20" y2="10"/></svg>`,
@@ -1945,6 +1965,33 @@
             emploi: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
             other: `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
         };
+
+        // Build category filter pills dynamically from loaded tables
+        function buildCategoryPills(tables) {
+            // Count tables per category
+            const counts = {};
+            tables.forEach(t => {
+                const cat = getTableCategory(t);
+                counts[cat] = (counts[cat] || 0) + 1;
+            });
+
+            // Sort categories: known ones first in a fixed order, then alphabetically
+            const ORDER = ['geo', 'logement', 'transport', 'emploi'];
+            const sorted = [
+                ...ORDER.filter(c => counts[c]),
+                ...Object.keys(counts).filter(c => !ORDER.includes(c)).sort()
+            ];
+
+            const pillsDiv = document.getElementById('category-pills');
+            pillsDiv.innerHTML = `
+                <button class="category-pill active" data-category="all" onclick="filterByCategory('all')">Tout <span class="pill-count">${tables.length}</span></button>
+                ${sorted.map(cat => `
+                    <button class="category-pill cat-${cat}" data-category="${cat}" onclick="filterByCategory('${cat}')">
+                        ${getCategoryLabel(cat)} <span class="pill-count">${counts[cat]}</span>
+                    </button>
+                `).join('')}
+            `;
+        }
 
         function filterByCategory(cat) {
             currentCategoryFilter = cat;
@@ -1996,12 +2043,10 @@
                     `;
                 }
 
-                // Clear search, reset category filter, and render
+                // Build dynamic category pills from API data, reset search & render
                 document.getElementById('catalog-search').value = '';
                 currentCategoryFilter = 'all';
-                document.querySelectorAll('.category-pill').forEach(p => {
-                    p.classList.toggle('active', p.dataset.category === 'all');
-                });
+                buildCategoryPills(currentCatalogTables);
                 renderSilverCatalogCards(currentCatalogTables);
             } catch (error) {
                 showStatus('Erreur lors du chargement du catalogue: ' + error.message, 'error');
@@ -2014,12 +2059,9 @@
             const searchTerm = document.getElementById('catalog-search').value.toLowerCase();
             let filtered = currentCatalogTables;
 
-            // Apply category filter
+            // Apply category filter using API category (with TABLE_METADATA fallback)
             if (currentCategoryFilter !== 'all') {
-                filtered = filtered.filter(t => {
-                    const meta = TABLE_METADATA[t.name] || DEFAULT_META;
-                    return meta.category === currentCategoryFilter;
-                });
+                filtered = filtered.filter(t => getTableCategory(t) === currentCategoryFilter);
             }
 
             // Apply search filter
@@ -2088,7 +2130,8 @@
 
             sortedTables.forEach(table => {
                 const meta = TABLE_METADATA[table.name] || DEFAULT_META;
-                const icon = CATEGORY_ICONS[meta.category] || CATEGORY_ICONS.other;
+                const category = getTableCategory(table);
+                const icon = CATEGORY_ICONS[category] || CATEGORY_ICONS.other;
 
                 const card = document.createElement('div');
                 card.className = 'catalog-card';
@@ -2116,9 +2159,9 @@
                     `;
                 }
 
-                // Category chip
+                // Category chip — use API category key + display label
                 const catChipStyle = `background:${meta.bg.replace('linear-gradient(135deg,','').split(',')[0].trim()}22;color:${meta.iconColor};border:1px solid ${meta.color}33;`;
-                const catChip = `<span class="cat-chip" style="${catChipStyle}">${meta.label}</span>`;
+                const catChip = `<span class="cat-chip" style="${catChipStyle}">${getCategoryLabel(category)}</span>`;
 
                 // Certification button (admins only)
                 let certButtonHtml = '';
