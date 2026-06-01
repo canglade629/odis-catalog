@@ -173,6 +173,7 @@ class SilverTableInfo(BaseModel):
     dependencies: List[str]
     version: int
     row_count: Optional[int]
+    annee_reference: Optional[int] = None
     certified: bool = False
     certified_at: Optional[str] = None
     certified_by: Optional[str] = None
@@ -201,6 +202,7 @@ class SilverTableDetail(BaseModel):
     dependencies: List[str]
     tags: List[str] = []
     upstream_models: List[str] = []
+    annee_reference: Optional[int] = None
     table_schema: TableSchema = Field(alias="schema")  # API key "schema"; avoids shadowing BaseModel.schema
     preview: List[Dict[str, Any]]
     certified: bool = False
@@ -302,6 +304,7 @@ async def get_silver_catalog(
                 dependencies=catalogue_info.get("upstream_models") or [],
                 version=version,
                 row_count=row_count,
+                annee_reference=catalogue_info.get("annee_reference"),
                 certified=cert_status is not None and cert_status.get("certified", False),
                 certified_at=cert_status.get("certified_at") if cert_status else None,
                 certified_by=cert_status.get("certified_by") if cert_status else None,
@@ -385,6 +388,7 @@ async def get_silver_table_detail(
             dependencies=table_catalogue.get("upstream_models") or [],
             tags=table_catalogue.get("tags") or [],
             upstream_models=table_catalogue.get("upstream_models") or [],
+            annee_reference=table_catalogue.get("annee_reference"),
             table_schema=table_schema,
             preview=preview_data,
             certified=cert_status is not None and cert_status.get("certified", False),

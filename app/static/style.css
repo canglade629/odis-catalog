@@ -600,6 +600,41 @@
     padding: 2px 8px;
 }
 
+/* Year badge on catalog cards */
+.metadata-badge-year {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    font-weight: 700;
+}
+
+/* Year badge in the overview metrics table */
+.overview-year-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+/* Year badge in the table detail modal */
+.detail-year-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
 @media (max-width: 640px) {
     .marketplace-hero { padding: 2rem 1.25rem; }
     .marketplace-hero-title { font-size: 1.5rem; }
