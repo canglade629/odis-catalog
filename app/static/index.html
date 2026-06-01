@@ -68,13 +68,25 @@
                     <span class="marketplace-hero-eyebrow">Data Marketplace</span>
                     <h1 class="marketplace-hero-title">Catalogue de données Odace</h1>
                     <p class="marketplace-hero-subtitle">Explorez et accédez aux jeux de données certifiés de la plateforme</p>
+                    <!-- View toggle: Catalogue / Vue d'ensemble -->
+                    <div class="hero-view-toggle">
+                        <button class="hero-view-btn active" id="hvb-catalogue" onclick="showCatalogSubView('catalogue')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                            Catalogue
+                        </button>
+                        <button class="hero-view-btn" id="hvb-overview" onclick="showCatalogSubView('overview')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                            Vue d'ensemble
+                        </button>
+                    </div>
+
                     <div id="marketplace-stats" class="marketplace-stats">
                         <span class="marketplace-stat-chip">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
                             Chargement…
                         </span>
                     </div>
-                    <div class="marketplace-search-wrap">
+                    <div id="hero-search-wrap" class="marketplace-search-wrap">
                         <span class="marketplace-search-icon">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                         </span>
@@ -83,19 +95,7 @@
                 </div>
             </div>
 
-            <!-- Catalogue sub-tabs: Vue d'ensemble / Catalogue -->
-            <div class="catalog-subtabs">
-                <button class="catalog-subtab" id="subtab-overview" onclick="showCatalogSubView('overview')">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                    Vue d'ensemble
-                </button>
-                <button class="catalog-subtab active" id="subtab-catalogue" onclick="showCatalogSubView('catalogue')">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-                    Catalogue
-                </button>
-            </div>
-
-            <!-- Overview panel -->
+            <!-- Overview panel (toggled via hero buttons) -->
             <div id="catalogue-overview-panel" style="display:none">
                 <!-- Stats row -->
                 <div class="overview-stats-grid" id="overview-stats-grid">
@@ -111,91 +111,9 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><rect x="16" y="16" width="5" height="5" rx="1"/><path d="M8 5.5h8M5.5 8v8M18.5 8v8M8 18.5h8"/></svg>
                         Diagramme de relations
                     </div>
-                    <div class="overview-er-container" id="overview-er-diagram">
-                        <div class="mermaid" id="er-mermaid-diagram">
-erDiagram
-    DIM_COMMUNE {
-        string commune_sk PK
-        string commune_insee_code
-        string commune_label
-        string departement_code
-        string region_code
-    }
-    FACT_ZONE_ATTRACTION {
-        string zone_attraction_sk PK
-        string commune_sk FK
-        string commune_pole_sk FK
-        string zone_attraction_categorie
-    }
-    FACT_LOYER_ANNONCE {
-        string commune_sk FK
-        string logement_profil_sk FK
-        decimal loyer_m2_moy
-        decimal loyer_m2_min
-        decimal loyer_m2_max
-    }
-    FACT_LOGEMENT_SOCIAL_RPLS {
-        string commune_sk FK
-        int annee PK
-        int nb_logements_total_sociaux
-        float taux_vacance_pct
-        float taux_mobilite_pct
-    }
-    DIM_ACCUEILLANT {
-        string accueillant_sk PK
-        string commune_sk FK
-        string statut
-        double latitude
-        double longitude
-    }
-    DIM_GARE {
-        string gare_sk PK
-        string commune_sk FK
-        string gare_segment_sk FK
-        string gare_code
-        string gare_label
-    }
-    DIM_GARE_SEGMENT {
-        string gare_segment_sk PK
-        string gare_segment_code
-        string gare_segment_label
-    }
-    DIM_LIGNE {
-        string ligne_sk PK
-        string ligne_code
-        string ligne_label
-        boolean is_tgv
-    }
-    REF_LOGEMENT_PROFIL {
-        string logement_profil_sk PK
-        string logement_type
-        string typologie
-        decimal surface
-    }
-    DIM_SIAE_STRUCTURE {
-        string siae_structure_sk PK
-        string commune_sk FK
-        string siae_structure_label
-        string code_postal
-    }
-    FACT_SIAE_POSTE {
-        string siae_poste_sk PK
-        string siae_structure_sk FK
-        string rome_code
-        string contrat_type
-        boolean poste_disponible
-    }
-
-    DIM_COMMUNE ||--o{ FACT_ZONE_ATTRACTION : "commune_sk"
-    DIM_COMMUNE ||--o{ FACT_ZONE_ATTRACTION : "commune_pole_sk"
-    DIM_COMMUNE ||--o{ FACT_LOYER_ANNONCE : "commune_sk"
-    DIM_COMMUNE ||--o{ FACT_LOGEMENT_SOCIAL_RPLS : "commune_sk"
-    DIM_COMMUNE ||--o{ DIM_ACCUEILLANT : "commune_sk"
-    DIM_COMMUNE ||--o{ DIM_GARE : "commune_sk"
-    DIM_COMMUNE ||--o{ DIM_SIAE_STRUCTURE : "commune_sk"
-    DIM_GARE_SEGMENT ||--o{ DIM_GARE : "gare_segment_sk"
-    REF_LOGEMENT_PROFIL ||--o{ FACT_LOYER_ANNONCE : "logement_profil_sk"
-    DIM_SIAE_STRUCTURE ||--o{ FACT_SIAE_POSTE : "siae_structure_sk"
+                    <div class="overview-er-container">
+                        <div id="er-diagram-host" class="er-diagram-host">
+                            <span class="er-loading">Chargement du diagramme…</span>
                         </div>
                     </div>
                 </div>
@@ -1855,26 +1773,87 @@ erDiagram
 
         function showCatalogSubView(view) {
             const overviewPanel = document.getElementById('catalogue-overview-panel');
-            const gridPanel = document.getElementById('catalogue-grid-panel');
-            const tabOverview = document.getElementById('subtab-overview');
-            const tabCatalogue = document.getElementById('subtab-catalogue');
+            const gridPanel    = document.getElementById('catalogue-grid-panel');
+            const heroSearch   = document.getElementById('hero-search-wrap');
+            const heroStats    = document.getElementById('marketplace-stats');
+            const btnCatalogue = document.getElementById('hvb-catalogue');
+            const btnOverview  = document.getElementById('hvb-overview');
 
             if (view === 'overview') {
                 overviewPanel.style.display = 'block';
-                gridPanel.style.display = 'none';
-                tabOverview.classList.add('active');
-                tabCatalogue.classList.remove('active');
-                // Render mermaid ER diagram once
+                gridPanel.style.display    = 'none';
+                heroSearch.style.display   = 'none';
+                heroStats.style.marginBottom = '0';
+                btnOverview.classList.add('active');
+                btnCatalogue.classList.remove('active');
                 if (!erDiagramRendered) {
-                    mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
-                    mermaid.run({ querySelector: '#er-mermaid-diagram' });
+                    renderDiagram(currentCatalogTables);
                     erDiagramRendered = true;
                 }
             } else {
                 overviewPanel.style.display = 'none';
-                gridPanel.style.display = 'block';
-                tabOverview.classList.remove('active');
-                tabCatalogue.classList.add('active');
+                gridPanel.style.display    = 'block';
+                heroSearch.style.display   = '';
+                heroStats.style.marginBottom = '';
+                btnCatalogue.classList.add('active');
+                btnOverview.classList.remove('active');
+            }
+        }
+
+        async function renderDiagram(tables) {
+            const host = document.getElementById('er-diagram-host');
+            const rowOf = (name) => {
+                const t = tables.find(x => x.name === name);
+                if (!t || t.row_count == null) return '';
+                const n = t.row_count;
+                return '\n' + (n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n.toLocaleString('fr-FR')) + ' lignes';
+            };
+            const code = `flowchart LR
+    subgraph GEO["Géographie"]
+        direction TB
+        dc["dim_commune${rowOf('dim_commune')}"]
+        fza["fact_zone_attraction${rowOf('fact_zone_attraction')}"]
+    end
+    subgraph TRANSPORT["Transport"]
+        direction TB
+        dgs["dim_gare_segment${rowOf('dim_gare_segment')}"]
+        dg["dim_gare${rowOf('dim_gare')}"]
+        dl["dim_ligne${rowOf('dim_ligne')}"]
+    end
+    subgraph LOG["Logement"]
+        direction TB
+        rlp["ref_logement_profil${rowOf('ref_logement_profil')}"]
+        fla["fact_loyer_annonce${rowOf('fact_loyer_annonce')}"]
+        flsr["fact_logement_social_rpls${rowOf('fact_logement_social_rpls')}"]
+    end
+    subgraph EMP["Emploi & Insertion"]
+        direction TB
+        dss["dim_siae_structure${rowOf('dim_siae_structure')}"]
+        da["dim_accueillant${rowOf('dim_accueillant')}"]
+        fsp["fact_siae_poste${rowOf('fact_siae_poste')}"]
+    end
+    dc --> fza
+    dc --> fla
+    dc --> flsr
+    dc --> da
+    dc --> dg
+    dc --> dss
+    dgs --> dg
+    rlp --> fla
+    dss --> fsp`;
+            try {
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: 'neutral',
+                    securityLevel: 'loose',
+                    flowchart: { htmlLabels: true, curve: 'basis' },
+                    themeVariables: { fontSize: '13px' }
+                });
+                const uid = 'er-' + Date.now();
+                const { svg } = await mermaid.render(uid, code);
+                host.innerHTML = svg;
+            } catch(e) {
+                host.innerHTML = '<p style="color:#94a3b8;text-align:center;padding:3rem;font-size:0.9rem">Diagramme non disponible</p>';
             }
         }
 
