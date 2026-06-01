@@ -707,222 +707,32 @@
 }
 
 /* =========================================================
-   Overview panel — ER / star-schema diagram container
+   Overview panel — ER diagram
    ========================================================= */
 .overview-er-container {
     padding: 1.5rem 1.5rem 2rem;
+    overflow-x: auto;
+    min-height: 160px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
     background: #f8fafc;
 }
 .er-diagram-host {
+    display: flex;
+    justify-content: center;
     width: 100%;
+}
+.er-diagram-host svg {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
 }
 .er-loading {
     color: #94a3b8;
     font-size: 0.88rem;
-    text-align: center;
+    align-self: center;
     padding: 2rem;
-}
-
-/* ---------------------------------------------------------
-   Star schema diagram
-   --------------------------------------------------------- */
-.star-schema {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0;
-    font-family: inherit;
-}
-
-/* Hub (dim_commune) */
-.sn-hub-row { width: 100%; max-width: 680px; }
-.sn-hub {
-    display: flex;
-    align-items: center;
-    gap: 1.25rem;
-    background: #0f172a;
-    color: white;
-    border-radius: 12px;
-    padding: 1rem 1.25rem 1rem 1.4rem;
-    cursor: pointer;
-    transition: background 0.15s, box-shadow 0.15s;
-    box-shadow: 0 4px 16px rgba(15,23,42,0.18);
-}
-.sn-hub:hover { background: #1e293b; }
-.sn-hub-left {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    min-width: 0;
-}
-.sn-hub-badge {
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.4);
-}
-.sn-hub-name {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: white;
-    font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
-    white-space: nowrap;
-}
-.sn-hub-right {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    border-left: 1px solid rgba(255,255,255,0.1);
-    padding-left: 1.1rem;
-}
-.sn-hub-desc {
-    font-size: 0.8rem;
-    color: rgba(255,255,255,0.5);
-    line-height: 1.4;
-}
-.sn-hub-rows {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: rgba(255,255,255,0.35);
-}
-.sn-hub-chevron { flex-shrink: 0; }
-
-/* Vertical connector + fork */
-.sn-vconnect {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    max-width: 680px;
-    height: 36px;
-    position: relative;
-}
-.sn-vline {
-    width: 2px;
-    flex: 1;
-    background: #cbd5e1;
-}
-.sn-hfork {
-    display: flex;
-    width: 52%;
-    height: 2px;
-    background: #cbd5e1;
-    border-radius: 1px;
-}
-
-/* Domain groups grid */
-.sn-domains {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    width: 100%;
-}
-.sn-domain {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    overflow: hidden;
-    transition: box-shadow 0.15s;
-}
-.sn-domain:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
-
-/* Coloured top bar per domain */
-.sn-domain-geo      { border-top: 3px solid #64748b; }
-.sn-domain-transport{ border-top: 3px solid #475569; }
-.sn-domain-logement { border-top: 3px solid #78716c; }
-.sn-domain-emploi   { border-top: 3px solid #57534e; }
-
-.sn-domain-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 0.9rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: #334155;
-    background: #f8fafc;
-    border-bottom: 1px solid #f1f5f9;
-}
-.sn-domain-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: currentColor;
-    flex-shrink: 0;
-}
-.sn-domain-geo      .sn-domain-dot { background: #64748b; }
-.sn-domain-transport.sn-domain-dot { background: #475569; }
-.sn-domain-logement .sn-domain-dot { background: #78716c; }
-.sn-domain-emploi   .sn-domain-dot { background: #57534e; }
-.sn-domain-body { display: flex; flex-direction: column; }
-
-/* Individual table nodes */
-.sn-node {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.6rem 0.9rem;
-    cursor: pointer;
-    transition: background 0.1s;
-    border-bottom: 1px solid #f8fafc;
-}
-.sn-node:last-child { border-bottom: none; }
-.sn-node:hover { background: #f8fafc; }
-.sn-node-inner { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
-.sn-name {
-    font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: #0f172a;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.sn-rows { font-size: 0.68rem; color: #94a3b8; }
-
-/* Type badges */
-.sn-badge {
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 2px 6px;
-    border-radius: 4px;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-.sn-badge-fait       { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
-.sn-badge-dimension  { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
-.sn-badge-reference,
-.sn-badge-rfrence    { background: #fdf4ff; color: #7e22ce; border: 1px solid #e9d5ff; }
-
-/* FK chain (two nodes with an arrow between) */
-.sn-chain {
-    display: flex;
-    align-items: stretch;
-    border-bottom: 1px solid #f1f5f9;
-    background: #fafafa;
-}
-.sn-chain .sn-node {
-    flex: 1;
-    border-bottom: none;
-    padding-top: 0.55rem;
-    padding-bottom: 0.55rem;
-}
-.sn-chain-arrow {
-    display: flex;
-    align-items: center;
-    padding: 0 0.1rem;
-    flex-shrink: 0;
-}
-
-@media (max-width: 640px) {
-    .sn-domains { grid-template-columns: 1fr; }
-    .sn-hub-right { display: none; }
 }
 
 /* =========================================================
