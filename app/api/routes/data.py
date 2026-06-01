@@ -182,6 +182,7 @@ class SilverTableInfo(BaseModel):
 class SilverCatalogResponse(BaseModel):
     """Catalog response for silver tables only."""
     tables: List[SilverTableInfo]
+    last_synced: Optional[str] = None
 
 
 class CatalogueRefreshResponse(BaseModel):
@@ -307,7 +308,8 @@ async def get_silver_catalog(
                 query_count=query_count
             ))
 
-        return SilverCatalogResponse(tables=tables)
+        last_synced = catalogue.get("last_synced") or catalogue.get("generated_at")
+        return SilverCatalogResponse(tables=tables, last_synced=last_synced)
     
     except Exception as e:
         logger.error(f"Error fetching silver catalog: {e}", exc_info=True)

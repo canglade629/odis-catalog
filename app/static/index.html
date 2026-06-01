@@ -83,22 +83,167 @@
                 </div>
             </div>
 
-            <!-- Category pills + sync button -->
-            <div class="category-pills-row">
-                <div class="category-pills" id="category-pills">
-                    <button class="category-pill active" data-category="all" onclick="filterByCategory('all')">Tout</button>
-                    <button class="category-pill cat-geo" data-category="geo" onclick="filterByCategory('geo')">🗺 Géographie</button>
-                    <button class="category-pill cat-logement" data-category="logement" onclick="filterByCategory('logement')">🏠 Logement</button>
-                    <button class="category-pill cat-transport" data-category="transport" onclick="filterByCategory('transport')">🚂 Transport</button>
-                    <button class="category-pill cat-emploi" data-category="emploi" onclick="filterByCategory('emploi')">👥 Emploi</button>
-                </div>
-                <button type="button" onclick="refreshSilverCatalog()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 hover:border-neutral-600 hover:text-neutral-700 transition flex items-center justify-center" title="Synchroniser le catalogue (Admin uniquement)">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+            <!-- Catalogue sub-tabs: Vue d'ensemble / Catalogue -->
+            <div class="catalog-subtabs">
+                <button class="catalog-subtab" id="subtab-overview" onclick="showCatalogSubView('overview')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    Vue d'ensemble
+                </button>
+                <button class="catalog-subtab active" id="subtab-catalogue" onclick="showCatalogSubView('catalogue')">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                    Catalogue
                 </button>
             </div>
 
-            <div id="silver-catalog-grid" class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
-                <p class="info-text text-neutral-500 italic py-5 text-center col-span-full">Chargement du catalogue…</p>
+            <!-- Overview panel -->
+            <div id="catalogue-overview-panel" style="display:none">
+                <!-- Stats row -->
+                <div class="overview-stats-grid" id="overview-stats-grid">
+                    <div class="overview-stat-card"><div class="overview-stat-value" id="ov-total-tables">—</div><div class="overview-stat-label">Jeux de données</div></div>
+                    <div class="overview-stat-card"><div class="overview-stat-value" id="ov-total-rows">—</div><div class="overview-stat-label">Lignes totales</div></div>
+                    <div class="overview-stat-card"><div class="overview-stat-value" id="ov-certified">—</div><div class="overview-stat-label">Tables certifiées</div></div>
+                    <div class="overview-stat-card"><div class="overview-stat-value" id="ov-last-synced">—</div><div class="overview-stat-label">Dernière mise à jour</div></div>
+                </div>
+
+                <!-- ER Diagram -->
+                <div class="overview-section">
+                    <div class="overview-section-header">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><rect x="16" y="16" width="5" height="5" rx="1"/><path d="M8 5.5h8M5.5 8v8M18.5 8v8M8 18.5h8"/></svg>
+                        Diagramme de relations
+                    </div>
+                    <div class="overview-er-container" id="overview-er-diagram">
+                        <div class="mermaid" id="er-mermaid-diagram">
+erDiagram
+    DIM_COMMUNE {
+        string commune_sk PK
+        string commune_insee_code
+        string commune_label
+        string departement_code
+        string region_code
+    }
+    FACT_ZONE_ATTRACTION {
+        string zone_attraction_sk PK
+        string commune_sk FK
+        string commune_pole_sk FK
+        string zone_attraction_categorie
+    }
+    FACT_LOYER_ANNONCE {
+        string commune_sk FK
+        string logement_profil_sk FK
+        decimal loyer_m2_moy
+        decimal loyer_m2_min
+        decimal loyer_m2_max
+    }
+    FACT_LOGEMENT_SOCIAL_RPLS {
+        string commune_sk FK
+        int annee PK
+        int nb_logements_total_sociaux
+        float taux_vacance_pct
+        float taux_mobilite_pct
+    }
+    DIM_ACCUEILLANT {
+        string accueillant_sk PK
+        string commune_sk FK
+        string statut
+        double latitude
+        double longitude
+    }
+    DIM_GARE {
+        string gare_sk PK
+        string commune_sk FK
+        string gare_segment_sk FK
+        string gare_code
+        string gare_label
+    }
+    DIM_GARE_SEGMENT {
+        string gare_segment_sk PK
+        string gare_segment_code
+        string gare_segment_label
+    }
+    DIM_LIGNE {
+        string ligne_sk PK
+        string ligne_code
+        string ligne_label
+        boolean is_tgv
+    }
+    REF_LOGEMENT_PROFIL {
+        string logement_profil_sk PK
+        string logement_type
+        string typologie
+        decimal surface
+    }
+    DIM_SIAE_STRUCTURE {
+        string siae_structure_sk PK
+        string commune_sk FK
+        string siae_structure_label
+        string code_postal
+    }
+    FACT_SIAE_POSTE {
+        string siae_poste_sk PK
+        string siae_structure_sk FK
+        string rome_code
+        string contrat_type
+        boolean poste_disponible
+    }
+
+    DIM_COMMUNE ||--o{ FACT_ZONE_ATTRACTION : "commune_sk"
+    DIM_COMMUNE ||--o{ FACT_ZONE_ATTRACTION : "commune_pole_sk"
+    DIM_COMMUNE ||--o{ FACT_LOYER_ANNONCE : "commune_sk"
+    DIM_COMMUNE ||--o{ FACT_LOGEMENT_SOCIAL_RPLS : "commune_sk"
+    DIM_COMMUNE ||--o{ DIM_ACCUEILLANT : "commune_sk"
+    DIM_COMMUNE ||--o{ DIM_GARE : "commune_sk"
+    DIM_COMMUNE ||--o{ DIM_SIAE_STRUCTURE : "commune_sk"
+    DIM_GARE_SEGMENT ||--o{ DIM_GARE : "gare_segment_sk"
+    REF_LOGEMENT_PROFIL ||--o{ FACT_LOYER_ANNONCE : "logement_profil_sk"
+    DIM_SIAE_STRUCTURE ||--o{ FACT_SIAE_POSTE : "siae_structure_sk"
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Per-table metrics -->
+                <div class="overview-section">
+                    <div class="overview-section-header">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                        Métriques par table
+                    </div>
+                    <div class="overview-metrics-wrapper">
+                        <table class="overview-metrics-table" id="overview-metrics-table">
+                            <thead>
+                                <tr>
+                                    <th>Table</th>
+                                    <th>Catégorie</th>
+                                    <th>Type</th>
+                                    <th>Lignes</th>
+                                    <th>Requêtes</th>
+                                    <th>Certification</th>
+                                </tr>
+                            </thead>
+                            <tbody id="overview-metrics-tbody">
+                                <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:2rem">Chargement…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category pills + sync button (catalogue sub-view) -->
+            <div id="catalogue-grid-panel">
+                <div class="category-pills-row">
+                    <div class="category-pills" id="category-pills">
+                        <button class="category-pill active" data-category="all" onclick="filterByCategory('all')">Tout</button>
+                        <button class="category-pill cat-geo" data-category="geo" onclick="filterByCategory('geo')">Géographie</button>
+                        <button class="category-pill cat-logement" data-category="logement" onclick="filterByCategory('logement')">Logement</button>
+                        <button class="category-pill cat-transport" data-category="transport" onclick="filterByCategory('transport')">Transport</button>
+                        <button class="category-pill cat-emploi" data-category="emploi" onclick="filterByCategory('emploi')">Emploi & Insertion</button>
+                    </div>
+                    <button type="button" onclick="refreshSilverCatalog()" class="btn-icon p-2 rounded border border-neutral-300 bg-white text-neutral-500 hover:bg-neutral-100 hover:border-neutral-600 hover:text-neutral-700 transition flex items-center justify-center" title="Synchroniser le catalogue (Admin uniquement)">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                    </button>
+                </div>
+
+                <div id="silver-catalog-grid" class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
+                    <p class="info-text text-neutral-500 italic py-5 text-center col-span-full">Chargement du catalogue…</p>
+                </div>
             </div>
         </div>
 
@@ -1703,22 +1848,108 @@
             resultsContent.innerHTML = html;
         }
 
+        // =========================================================
+        // Catalogue sub-view switching (Vue d'ensemble / Catalogue)
+        // =========================================================
+        let erDiagramRendered = false;
+
+        function showCatalogSubView(view) {
+            const overviewPanel = document.getElementById('catalogue-overview-panel');
+            const gridPanel = document.getElementById('catalogue-grid-panel');
+            const tabOverview = document.getElementById('subtab-overview');
+            const tabCatalogue = document.getElementById('subtab-catalogue');
+
+            if (view === 'overview') {
+                overviewPanel.style.display = 'block';
+                gridPanel.style.display = 'none';
+                tabOverview.classList.add('active');
+                tabCatalogue.classList.remove('active');
+                // Render mermaid ER diagram once
+                if (!erDiagramRendered) {
+                    mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
+                    mermaid.run({ querySelector: '#er-mermaid-diagram' });
+                    erDiagramRendered = true;
+                }
+            } else {
+                overviewPanel.style.display = 'none';
+                gridPanel.style.display = 'block';
+                tabOverview.classList.remove('active');
+                tabCatalogue.classList.add('active');
+            }
+        }
+
+        function renderOverview(tables, lastSynced) {
+            const totalRows = tables.reduce((s, t) => s + (t.row_count || 0), 0);
+            const certCount = tables.filter(t => t.certified).length;
+
+            // Stats
+            document.getElementById('ov-total-tables').textContent = tables.length;
+            document.getElementById('ov-total-rows').textContent =
+                totalRows >= 1000000
+                    ? (totalRows / 1000000).toFixed(1) + 'M'
+                    : totalRows.toLocaleString('fr-FR');
+            document.getElementById('ov-certified').textContent = certCount + ' / ' + tables.length;
+
+            if (lastSynced) {
+                try {
+                    const d = new Date(lastSynced);
+                    document.getElementById('ov-last-synced').textContent = d.toLocaleDateString('fr-FR', {
+                        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    });
+                } catch {
+                    document.getElementById('ov-last-synced').textContent = lastSynced;
+                }
+            } else {
+                document.getElementById('ov-last-synced').textContent = '—';
+            }
+
+            // Per-table metrics tbody
+            const tbody = document.getElementById('overview-metrics-tbody');
+            const CERT_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+            const UNCERT_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
+            const sorted = [...tables].sort((a, b) => {
+                const ma = TABLE_METADATA[a.name] || DEFAULT_META;
+                const mb = TABLE_METADATA[b.name] || DEFAULT_META;
+                if (ma.category !== mb.category) return ma.category.localeCompare(mb.category);
+                return a.name.localeCompare(b.name);
+            });
+
+            tbody.innerHTML = sorted.map(t => {
+                const meta = TABLE_METADATA[t.name] || DEFAULT_META;
+                const rowStr = t.row_count != null ? t.row_count.toLocaleString('fr-FR') : '—';
+                const qStr = t.query_count ? t.query_count.toLocaleString('fr-FR') : '—';
+                const certHtml = t.certified
+                    ? `<span class="overview-cert-badge certified">${CERT_ICON} Certifiée</span>`
+                    : `<span class="overview-cert-badge pending">${UNCERT_ICON} En attente</span>`;
+                return `<tr onclick="showTableDetail('${t.name}')" style="cursor:pointer">
+                    <td><code class="overview-table-name">${t.name}</code></td>
+                    <td><span class="overview-cat-label">${meta.label}</span></td>
+                    <td><span class="overview-type-badge type-${meta.type.toLowerCase().replace(/[^a-z]/g,'')}">${meta.type}</span></td>
+                    <td class="overview-num">${rowStr}</td>
+                    <td class="overview-num">${qStr}</td>
+                    <td>${certHtml}</td>
+                </tr>`;
+            }).join('');
+        }
+
         // Silver Catalog Functions
         let currentCatalogTables = [];
         let currentCategoryFilter = 'all';
 
+        // 2-tone neutral palette: slate-cool for spatial (geo/transport), stone-warm for social (logement/emploi)
         const TABLE_METADATA = {
-            dim_commune:               { category: 'geo',       label: 'Géographie',        color: '#10b981', bg: 'linear-gradient(135deg,#d1fae5,#a7f3d0)', iconColor: '#059669', type: 'Dimension'  },
-            fact_zone_attraction:      { category: 'geo',       label: 'Géographie',        color: '#10b981', bg: 'linear-gradient(135deg,#d1fae5,#a7f3d0)', iconColor: '#059669', type: 'Fait'       },
-            dim_gare:                  { category: 'transport', label: 'Transport',          color: '#8b5cf6', bg: 'linear-gradient(135deg,#ede9fe,#c4b5fd)', iconColor: '#7c3aed', type: 'Dimension'  },
-            dim_gare_segment:          { category: 'transport', label: 'Transport',          color: '#8b5cf6', bg: 'linear-gradient(135deg,#ede9fe,#c4b5fd)', iconColor: '#7c3aed', type: 'Dimension'  },
-            dim_ligne:                 { category: 'transport', label: 'Transport',          color: '#8b5cf6', bg: 'linear-gradient(135deg,#ede9fe,#c4b5fd)', iconColor: '#7c3aed', type: 'Dimension'  },
-            fact_loyer_annonce:        { category: 'logement',  label: 'Logement',           color: '#f59e0b', bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', iconColor: '#d97706', type: 'Fait'       },
-            fact_logement_social_rpls: { category: 'logement',  label: 'Logement',           color: '#f59e0b', bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', iconColor: '#d97706', type: 'Fait'       },
-            ref_logement_profil:       { category: 'logement',  label: 'Logement',           color: '#f59e0b', bg: 'linear-gradient(135deg,#fef3c7,#fde68a)', iconColor: '#d97706', type: 'Référence'  },
-            dim_siae_structure:        { category: 'emploi',    label: 'Emploi & Insertion', color: '#3b82f6', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)', iconColor: '#2563eb', type: 'Dimension'  },
-            fact_siae_poste:           { category: 'emploi',    label: 'Emploi & Insertion', color: '#3b82f6', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)', iconColor: '#2563eb', type: 'Fait'       },
-            dim_accueillant:           { category: 'emploi',    label: 'Emploi & Insertion', color: '#3b82f6', bg: 'linear-gradient(135deg,#dbeafe,#bfdbfe)', iconColor: '#2563eb', type: 'Dimension'  },
+            dim_commune:               { category: 'geo',       label: 'Géographie',        color: '#64748b', bg: 'linear-gradient(135deg,#f1f5f9,#e2e8f0)', iconColor: '#475569', type: 'Dimension'  },
+            fact_zone_attraction:      { category: 'geo',       label: 'Géographie',        color: '#64748b', bg: 'linear-gradient(135deg,#f1f5f9,#e2e8f0)', iconColor: '#475569', type: 'Fait'       },
+            dim_gare:                  { category: 'transport', label: 'Transport',          color: '#64748b', bg: 'linear-gradient(135deg,#f1f5f9,#e2e8f0)', iconColor: '#475569', type: 'Dimension'  },
+            dim_gare_segment:          { category: 'transport', label: 'Transport',          color: '#64748b', bg: 'linear-gradient(135deg,#f1f5f9,#e2e8f0)', iconColor: '#475569', type: 'Référence'  },
+            dim_ligne:                 { category: 'transport', label: 'Transport',          color: '#64748b', bg: 'linear-gradient(135deg,#f1f5f9,#e2e8f0)', iconColor: '#475569', type: 'Dimension'  },
+            fact_loyer_annonce:        { category: 'logement',  label: 'Logement',           color: '#78716c', bg: 'linear-gradient(135deg,#f5f5f4,#e7e5e4)', iconColor: '#57534e', type: 'Fait'       },
+            fact_logement_social_rpls: { category: 'logement',  label: 'Logement',           color: '#78716c', bg: 'linear-gradient(135deg,#f5f5f4,#e7e5e4)', iconColor: '#57534e', type: 'Fait'       },
+            ref_logement_profil:       { category: 'logement',  label: 'Logement',           color: '#78716c', bg: 'linear-gradient(135deg,#f5f5f4,#e7e5e4)', iconColor: '#57534e', type: 'Référence'  },
+            dim_siae_structure:        { category: 'emploi',    label: 'Emploi & Insertion', color: '#78716c', bg: 'linear-gradient(135deg,#f5f5f4,#e7e5e4)', iconColor: '#57534e', type: 'Dimension'  },
+            fact_siae_poste:           { category: 'emploi',    label: 'Emploi & Insertion', color: '#78716c', bg: 'linear-gradient(135deg,#f5f5f4,#e7e5e4)', iconColor: '#57534e', type: 'Fait'       },
+            dim_accueillant:           { category: 'emploi',    label: 'Emploi & Insertion', color: '#78716c', bg: 'linear-gradient(135deg,#f5f5f4,#e7e5e4)', iconColor: '#57534e', type: 'Dimension'  },
         };
 
         const DEFAULT_META = { category: 'other', label: 'Données', color: '#64748b', bg: 'linear-gradient(135deg,#f1f5f9,#e2e8f0)', iconColor: '#475569', type: 'Table' };
@@ -1756,6 +1987,9 @@
 
                 // Store tables globally for filtering
                 currentCatalogTables = data.tables;
+
+                // Populate overview panel data
+                renderOverview(currentCatalogTables, data.last_synced);
 
                 // Update hero stats
                 const totalRows = currentCatalogTables.reduce((sum, t) => sum + (t.row_count || 0), 0);

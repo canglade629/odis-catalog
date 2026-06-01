@@ -488,10 +488,7 @@
     background: #0f172a; border-color: #0f172a; color: white;
     font-weight: 600; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
 }
-.category-pill.active.cat-geo      { background: #059669; border-color: #059669; }
-.category-pill.active.cat-logement { background: #d97706; border-color: #d97706; }
-.category-pill.active.cat-transport{ background: #7c3aed; border-color: #7c3aed; }
-.category-pill.active.cat-emploi   { background: #2563eb; border-color: #2563eb; }
+/* All active category pills use the same neutral dark — no per-category color overrides */
 
 /* Marketplace catalog cards (overrides old .catalog-card) */
 .catalog-card {
@@ -608,3 +605,181 @@
     .marketplace-hero-title { font-size: 1.5rem; }
     .category-pills-row { flex-direction: column; align-items: flex-start; }
 }
+
+/* =========================================================
+   Catalogue sub-tabs (Vue d'ensemble / Catalogue)
+   ========================================================= */
+.catalog-subtabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e2e8f0;
+}
+.catalog-subtab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.6rem 1.4rem;
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
+}
+.catalog-subtab:hover { color: #0f172a; }
+.catalog-subtab.active {
+    color: #0f172a;
+    font-weight: 600;
+    border-bottom-color: #0f172a;
+}
+
+/* =========================================================
+   Overview panel — stats row
+   ========================================================= */
+.overview-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.overview-stat-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.overview-stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+}
+.overview-stat-label {
+    font-size: 0.78rem;
+    color: #64748b;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* =========================================================
+   Overview panel — section headers
+   ========================================================= */
+.overview-section {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.overview-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.85rem 1.25rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #334155;
+    border-bottom: 1px solid #f1f5f9;
+    background: #f8fafc;
+}
+
+/* =========================================================
+   Overview panel — ER diagram
+   ========================================================= */
+.overview-er-container {
+    padding: 1.5rem;
+    overflow-x: auto;
+    min-height: 120px;
+    display: flex;
+    justify-content: center;
+}
+.overview-er-container .mermaid {
+    min-width: 640px;
+    max-width: 100%;
+}
+
+/* =========================================================
+   Overview panel — metrics table
+   ========================================================= */
+.overview-metrics-wrapper {
+    overflow-x: auto;
+}
+.overview-metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+}
+.overview-metrics-table thead th {
+    text-align: left;
+    padding: 0.65rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+.overview-metrics-table tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.1s;
+}
+.overview-metrics-table tbody tr:hover { background: #f8fafc; }
+.overview-metrics-table tbody td {
+    padding: 0.6rem 1rem;
+    color: #334155;
+    vertical-align: middle;
+}
+.overview-table-name {
+    font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    color: #0f172a;
+    background: none;
+    padding: 0;
+}
+.overview-cat-label {
+    font-size: 0.78rem;
+    color: #475569;
+}
+.overview-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+.overview-type-badge.type-fait { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.overview-type-badge.type-dimension { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.overview-type-badge.type-rfrence { background: #fdf4ff; color: #7e22ce; border-color: #e9d5ff; }
+.overview-num {
+    font-variant-numeric: tabular-nums;
+    color: #334155;
+    font-size: 0.83rem;
+}
+.overview-cert-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+.overview-cert-badge.certified { color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; }
+.overview-cert-badge.pending { color: #94a3b8; background: #f8fafc; border: 1px solid #e2e8f0; }
