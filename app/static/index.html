@@ -2350,6 +2350,32 @@
                     </div>
                 `;
             }
+
+            // Sources de données
+            let sourcesHtml = '';
+            if (tableData.sources && tableData.sources.length > 0) {
+                const DOWNLOAD_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+                const DOC_ICON    = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+                sourcesHtml = `
+                    <div class="modal-section">
+                        <h4>Sources de données</h4>
+                        <ul class="sources-list">
+                            ${tableData.sources.map(s => `
+                                <li class="source-item">
+                                    <div class="source-info">
+                                        <code class="source-key">${s.source_key}</code>
+                                        ${s.description ? `<span class="source-description">${s.description}</span>` : ''}
+                                    </div>
+                                    <div class="source-links">
+                                        ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="source-link source-link-download">${DOWNLOAD_ICON} Télécharger</a>` : ''}
+                                        ${s.doc_url ? `<a href="${s.doc_url}" target="_blank" rel="noopener" class="source-link source-link-doc">${DOC_ICON} Documentation</a>` : ''}
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
             
             // Schema section
             let schemaHtml = `
@@ -2456,6 +2482,7 @@
                     ${certActionHtml ? `<div class="table-detail-actions">${certActionHtml}</div>` : ''}
                 </div>
                 ${dependenciesHtml}
+                ${sourcesHtml}
                 ${schemaHtml}
                 ${previewHtml}
             `;

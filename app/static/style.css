@@ -281,6 +281,58 @@
 }
 .dependencies-list li:hover { background: #f1f5f9; }
 .dependencies-list code { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+
+/* Sources de données */
+.sources-list { list-style: none; padding: 0; margin: 12px 0 0 0; display: flex; flex-direction: column; gap: 8px; }
+.source-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border-left: 4px solid #64748b;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+.source-item:hover { background: #f1f5f9; }
+.source-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.source-key {
+    background: #e2e8f0;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    color: #334155;
+    font-weight: 600;
+    align-self: flex-start;
+}
+.source-description { font-size: 0.85rem; color: #64748b; margin-top: 2px; }
+.source-links { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.source-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.source-link-download {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+}
+.source-link-download:hover { background: #dbeafe; border-color: #93c5fd; }
+.source-link-doc {
+    background: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+}
+.source-link-doc:hover { background: #dcfce7; border-color: #86efac; }
+
 .error-text { color: #dc2626; font-style: italic; padding: 20px; text-align: center; }
 
 /* Table detail modal – modern layout */

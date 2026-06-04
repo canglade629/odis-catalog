@@ -195,6 +195,14 @@ class CatalogueRefreshResponse(BaseModel):
     version: str
 
 
+class DataSource(BaseModel):
+    """A raw data source that feeds a silver table."""
+    source_key: str
+    url: Optional[str] = None
+    doc_url: Optional[str] = None
+    description: Optional[str] = None
+
+
 class SilverTableDetail(BaseModel):
     """Detailed information about a silver table."""
     model_config = ConfigDict(populate_by_name=True)
@@ -205,6 +213,7 @@ class SilverTableDetail(BaseModel):
     upstream_models: List[str] = []
     category: Optional[str] = None
     annee_reference: Optional[int] = None
+    sources: List[DataSource] = []
     table_schema: TableSchema = Field(alias="schema")  # API key "schema"; avoids shadowing BaseModel.schema
     preview: List[Dict[str, Any]]
     certified: bool = False
@@ -382,6 +391,18 @@ async def get_silver_table_detail(
         # Get certification status
         cert_status = await get_certification_status("silver", table_name, session)
         
+        raw_sources = table_catalogue.get("sources") or []
+        sources = [
+            DataSource(
+                source_key=s.get("source_key", ""),
+                url=s.get("url"),
+                doc_url=s.get("doc_url"),
+                description=s.get("description"),
+            )
+            for s in raw_sources
+            if isinstance(s, dict)
+        ]
+
         return SilverTableDetail(
             name=table_name,
             description_fr=(
@@ -393,6 +414,7 @@ async def get_silver_table_detail(
             upstream_models=table_catalogue.get("upstream_models") or [],
             category=table_catalogue.get("category"),
             annee_reference=table_catalogue.get("annee_reference"),
+            sources=sources,
             table_schema=table_schema,
             preview=preview_data,
             certified=cert_status is not None and cert_status.get("certified", False),
