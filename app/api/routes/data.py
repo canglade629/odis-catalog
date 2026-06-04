@@ -195,12 +195,12 @@ class CatalogueRefreshResponse(BaseModel):
     version: str
 
 
-class DataSource(BaseModel):
+class SourceInfo(BaseModel):
     """A raw data source that feeds a silver table."""
-    source_key: str
-    url: Optional[str] = None
-    doc_url: Optional[str] = None
+    name: str
     description: Optional[str] = None
+    download_url: Optional[str] = None
+    doc_url: Optional[str] = None
 
 
 class SilverTableDetail(BaseModel):
@@ -213,7 +213,7 @@ class SilverTableDetail(BaseModel):
     upstream_models: List[str] = []
     category: Optional[str] = None
     annee_reference: Optional[int] = None
-    sources: List[DataSource] = []
+    sources: List[SourceInfo] = []
     table_schema: TableSchema = Field(alias="schema")  # API key "schema"; avoids shadowing BaseModel.schema
     preview: List[Dict[str, Any]]
     certified: bool = False
@@ -393,11 +393,13 @@ async def get_silver_table_detail(
         
         raw_sources = table_catalogue.get("sources") or []
         sources = [
-            DataSource(
-                source_key=s.get("source_key", ""),
-                url=s.get("url"),
-                doc_url=s.get("doc_url"),
+            SourceInfo(
+                # Accept both YAML convention (name) and Postgres DBT convention (source_key)
+                name=s.get("name") or s.get("source_key", ""),
                 description=s.get("description"),
+                # Accept both YAML convention (download_url) and Postgres DBT convention (url)
+                download_url=s.get("download_url") or s.get("url"),
+                doc_url=s.get("doc_url"),
             )
             for s in raw_sources
             if isinstance(s, dict)

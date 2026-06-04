@@ -2359,20 +2359,20 @@
                 sourcesHtml = `
                     <div class="modal-section">
                         <h4>Sources de données</h4>
-                        <ul class="sources-list">
+                        <div class="sources-list">
                             ${tableData.sources.map(s => `
-                                <li class="source-item">
-                                    <div class="source-info">
-                                        <code class="source-key">${s.source_key}</code>
+                                <div class="source-card">
+                                    <div class="source-card-info">
+                                        <strong class="source-name">${s.name}</strong>
                                         ${s.description ? `<span class="source-description">${s.description}</span>` : ''}
                                     </div>
-                                    <div class="source-links">
-                                        ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="source-link source-link-download">${DOWNLOAD_ICON} Télécharger</a>` : ''}
+                                    <div class="source-card-links">
+                                        ${s.download_url ? `<a href="${s.download_url}" target="_blank" rel="noopener" class="source-link source-link-download">${DOWNLOAD_ICON} Télécharger</a>` : ''}
                                         ${s.doc_url ? `<a href="${s.doc_url}" target="_blank" rel="noopener" class="source-link source-link-doc">${DOC_ICON} Documentation</a>` : ''}
                                     </div>
-                                </li>
+                                </div>
                             `).join('')}
-                        </ul>
+                        </div>
                     </div>
                 `;
             }

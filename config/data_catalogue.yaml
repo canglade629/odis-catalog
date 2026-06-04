@@ -15,6 +15,11 @@ tables:
     category: "geo"
     description: "Table de dimension des communes françaises avec codes INSEE, départements et régions. Master Data Management (MDM) pour toutes les jointures géographiques."
     row_count: 34935
+    sources:
+      - name: "Découpage administratif communal (INSEE / data.gouv.fr)"
+        description: "Contours et codes INSEE des communes françaises issus d'OpenStreetMap, mis à jour annuellement."
+        download_url: "https://www.data.gouv.fr/fr/datasets/r/0e117c06-248f-45e5-8945-0e79d9136165"
+        doc_url: "https://www.data.gouv.fr/fr/datasets/decoupage-administratif-communal-francais-issu-de-openstreetmap/"
     fields:
       commune_sk:
         type: string
@@ -57,6 +62,11 @@ tables:
     category: "logement"
     description: "Table de référence des profils de biens immobiliers (type, typologie, surfaces) pour les données 2024. Utilisée pour jointure via logement_profil_sk."
     row_count: 4
+    sources:
+      - name: "Carte des loyers — indicateurs de loyers d'annonce (DHUP / MEF)"
+        description: "Profils de biens (type, surface, nombre de pièces) extraits de la carte des loyers d'annonce 2023."
+        download_url: "https://tabular-api.data.gouv.fr/api/resources/43618998-3b37-4a69-bb25-f321f1a93ed1/data/"
+        doc_url: "https://www.data.gouv.fr/fr/datasets/carte-des-loyers-indicateurs-de-loyers-dannonce/"
     fields:
       logement_profil_sk:
         type: string
@@ -111,6 +121,11 @@ tables:
     category: "emploi"
     description: "Table de dimension des structures d'accueil avec enrichissement géographique (FK vers dim_commune) et coordonnées GPS."
     row_count: 1293
+    sources:
+      - name: "API data.inclusion — structures d'insertion"
+        description: "Répertoire national des structures d'insertion par l'activité économique et accueillants (Plateforme de l'Inclusion)."
+        download_url: "https://api.data.inclusion.beta.gouv.fr/api/v0/structures/?page=1&size=100"
+        doc_url: "https://data.inclusion.beta.gouv.fr/"
     fields:
       accueillant_sk:
         type: string
@@ -153,6 +168,11 @@ tables:
     category: "transport"
     description: "Table de référence des segments de gares (A=National, B=Régional, C=Local). Table hardcodée avec 3 lignes."
     row_count: 3
+    sources:
+      - name: "Liste des gares voyageurs SNCF"
+        description: "Référentiel des gares voyageurs open data SNCF — catégories de gares (national/régional/local)."
+        download_url: "https://tabular-api.data.gouv.fr/api/resources/d22ba593-90a4-4725-977c-095d1f654d28/data/"
+        doc_url: "https://data.sncf.com/explore/dataset/liste-des-gares/"
     fields:
       gare_segment_sk:
         type: string
@@ -189,6 +209,11 @@ tables:
     category: "transport"
     description: "Table de dimension des gares voyageurs avec enrichissement géographique (FK vers dim_commune et dim_gare_segment) et coordonnées GPS."
     row_count: 2785
+    sources:
+      - name: "Liste des gares voyageurs SNCF"
+        description: "Coordonnées GPS, codes UIC et informations des gares voyageurs du réseau ferroviaire français (SNCF open data)."
+        download_url: "https://tabular-api.data.gouv.fr/api/resources/d22ba593-90a4-4725-977c-095d1f654d28/data/"
+        doc_url: "https://data.sncf.com/explore/dataset/liste-des-gares/"
     fields:
       gare_sk:
         type: string
@@ -243,6 +268,11 @@ tables:
     category: "transport"
     description: "Table de dimension des lignes ferroviaires avec catégories (TGV/non-TGV) et coordonnées géographiques."
     row_count: 933
+    sources:
+      - name: "Lignes de voyageurs SNCF"
+        description: "Tracés et identifiants des lignes ferroviaires voyageurs du réseau national SNCF (open data)."
+        download_url: "https://tabular-api.data.gouv.fr/api/resources/2f204d3f-4274-42fb-934f-4a73954e0c4e/data/"
+        doc_url: "https://data.sncf.com/explore/dataset/referentiel-des-lignes/"
     fields:
       ligne_sk:
         type: string
@@ -285,6 +315,11 @@ tables:
     category: "emploi"
     description: "Table de dimension des structures d'insertion par l'activité économique (SIAE) avec enrichissement géographique (FK vers dim_commune) et informations de contact."
     row_count: 86374
+    sources:
+      - name: "API data.inclusion — structures SIAE"
+        description: "Répertoire national des structures d'insertion par l'activité économique (ACI, AI, EI, ETTI, EITI) — Plateforme de l'Inclusion."
+        download_url: "https://api.data.inclusion.beta.gouv.fr/api/v0/structures/?page=1&size=100"
+        doc_url: "https://data.inclusion.beta.gouv.fr/"
     fields:
       siae_structure_sk:
         type: string
@@ -371,6 +406,15 @@ tables:
     category: "logement"
     description: "Table de faits des loyers d'annonce au m² par commune avec bornes de prédiction, niveau d'observation et indicateurs de qualité. FK vers dim_commune et ref_logement_profil."
     row_count: 139672
+    sources:
+      - name: "Carte des loyers — appartements 2023 (DHUP / MEF)"
+        description: "Indicateurs de loyers d'annonce pour appartements par commune en 2023 — Direction de l'Habitat, de l'Urbanisme et des Paysages."
+        download_url: "https://tabular-api.data.gouv.fr/api/resources/43618998-3b37-4a69-bb25-f321f1a93ed1/data/"
+        doc_url: "https://www.data.gouv.fr/fr/datasets/carte-des-loyers-indicateurs-de-loyers-dannonce/"
+      - name: "Carte des loyers — appartements 2018 (DHUP / MEF)"
+        description: "Indicateurs de loyers d'annonce pour appartements par commune en 2018 — données historiques."
+        download_url: "https://tabular-api.data.gouv.fr/api/resources/8fac6fb7-cd07-4747-8e0b-b101c476f0da/data/"
+        doc_url: "https://www.data.gouv.fr/fr/datasets/carte-des-loyers-indicateurs-de-loyers-dannonce/"
     fields:
       commune_sk:
         type: string
@@ -439,6 +483,11 @@ tables:
     category: "geo"
     description: "Table de faits des zones d'attraction des villes 2020 avec FKs vers communes (commune et pôle) et catégories d'attraction."
     row_count: 26209
+    sources:
+      - name: "Zones d'attraction des villes 2020 (INSEE)"
+        description: "Délimitation des zones d'attraction des villes au sens de l'INSEE — zonage de référence pour l'analyse des mobilités domicile-travail."
+        download_url: "https://www.insee.fr/fr/statistiques/fichier/4803954/ZAV2020_csv.zip"
+        doc_url: "https://www.insee.fr/fr/statistiques/4803954"
     fields:
       zone_attraction_sk:
         type: string
@@ -481,6 +530,11 @@ tables:
     category: "emploi"
     description: "Table de faits des postes ouverts en SIAE avec codes ROME, types de contrats et disponibilité. FK vers dim_siae_structure."
     row_count: 4294
+    sources:
+      - name: "API data.inclusion — postes (offres d'emploi en SIAE)"
+        description: "Postes et offres d'emploi proposés par les structures d'insertion par l'activité économique, avec codes ROME et conditions d'accueil."
+        download_url: "https://api.data.inclusion.beta.gouv.fr/api/v0/offres/?page=1&size=100"
+        doc_url: "https://data.inclusion.beta.gouv.fr/"
     fields:
       siae_poste_sk:
         type: string
@@ -570,6 +624,11 @@ tables:
     category: "logement"
     description: "Table de faits des statistiques sur le parc locatif social (Répertoire des logements locatifs des bailleurs sociaux - RPLS) à la maille commune et millésime annuel. Clé composite (commune_sk, annee). FK vers dim_commune."
     row_count: 0
+    sources:
+      - name: "RPLS — Répertoire des logements locatifs des bailleurs sociaux (Ministère du Logement)"
+        description: "Statistiques annuelles sur le parc de logements sociaux par commune : nombre de logements, taux de vacance, ancienneté du parc."
+        download_url: "https://www.data.gouv.fr/fr/datasets/r/9efe8d44-9ef2-4ffe-ad32-5ebf36e4b3da"
+        doc_url: "https://www.data.gouv.fr/fr/datasets/repertoire-des-logements-locatifs-des-bailleurs-sociaux/"
     fields:
       commune_sk:
         type: string

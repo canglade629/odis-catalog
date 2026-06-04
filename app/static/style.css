@@ -283,31 +283,29 @@
 .dependencies-list code { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
 
 /* Sources de données */
-.sources-list { list-style: none; padding: 0; margin: 12px 0 0 0; display: flex; flex-direction: column; gap: 8px; }
-.source-item {
+.sources-list { padding: 0; margin: 12px 0 0 0; display: flex; flex-direction: column; gap: 8px; }
+.source-card {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: 16px;
     padding: 12px 14px;
     background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-left: 4px solid #64748b;
     border-radius: 6px;
     transition: background 0.15s;
 }
-.source-item:hover { background: #f1f5f9; }
-.source-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.source-key {
-    background: #e2e8f0;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-size: 0.82rem;
-    color: #334155;
+.source-card:hover { background: #f1f5f9; }
+.source-card-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.source-name {
+    font-size: 0.875rem;
     font-weight: 600;
-    align-self: flex-start;
+    color: #1e293b;
+    line-height: 1.4;
 }
-.source-description { font-size: 0.85rem; color: #64748b; margin-top: 2px; }
-.source-links { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.source-description { font-size: 0.82rem; color: #64748b; line-height: 1.5; }
+.source-card-links { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; align-items: flex-start; }
 .source-link {
     display: inline-flex;
     align-items: center;
