@@ -605,7 +605,7 @@ async def execute_sql_query(
 ):
     """Execute a SQL SELECT query against the data lake with cursor-style pagination.
 
-    Regular users may only run SELECT statements against certified silver tables.
+    Regular users may only run SELECT statements against silver tables.
     Admin users may run any SQL against all available tables.
     Results are capped at min(requested limit, 10 000) rows per page.
     Use `offset` to paginate through large result sets.
@@ -625,17 +625,9 @@ async def execute_sql_query(
         if current_user.is_admin:
             _load_all_tables(executor, catalogue, settings)
         else:
-            certified_names = [
-                name
-                for name, meta in catalogue.get("tables", {}).items()
-                if meta.get("certified")
-            ]
-            if not certified_names:
-                raise HTTPException(
-                    status_code=503,
-                    detail="No certified tables are available. Please contact an administrator.",
-                )
-            _load_certified_silver_tables(executor, certified_names, settings)
+            # Load all silver tables (certification restriction temporarily disabled)
+            all_silver_names = list(catalogue.get("tables", {}).keys())
+            _load_certified_silver_tables(executor, all_silver_names, settings)
 
         limit = min(query_req.limit, 10_000)
         offset = max(query_req.offset, 0)
@@ -682,14 +674,17 @@ async def export_table(
 ):
     """Stream a full certified silver table as CSV or Parquet.
 
-    Regular users can export any certified silver table with no row limit.
+    Regular users can export any silver table with no row limit.
     Admin users can export any table.
     Pass `?format=parquet` to receive a Parquet file instead of CSV.
     """
     if format not in ("csv", "parquet"):
         raise HTTPException(status_code=400, detail="format must be 'csv' or 'parquet'.")
 
-    await verify_table_access("silver", table, session, current_user)
+    # Certification restriction temporarily disabled — all silver tables are accessible.
+    # Admins keep unrestricted access across all layers; regular users are limited to silver.
+    if not current_user.is_admin:
+        await verify_table_access("silver", table, session, current_user)
 
     settings = get_settings()
     table_path = settings.get_silver_path(table)
