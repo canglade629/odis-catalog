@@ -23,9 +23,10 @@ The API now has **two levels of access**:
 - `GET /api/jobs/{job_id}` - Get job details
 - `GET /api/jobs/logs/stream` - View logs
 
-✅ **Query Certified Silver Tables**:
+✅ **Query and Export Certified Silver Tables**:
 - `POST /api/data/preview/silver/{table_name}` - Preview certified silver tables only
-- `POST /api/data/query` - SQL queries on certified silver tables only
+- `POST /api/data/query` - **SELECT-only** SQL queries restricted to certified silver tables (up to 10 000 rows per page, supports `offset` for pagination)
+- `GET /api/data/export/{table_name}` - Full table export as **CSV** (default) or **Parquet** (`?format=parquet`), no row limit, certified silver tables only
 
 ### What They CANNOT Do:
 ❌ **Execute Pipelines**:
@@ -62,7 +63,8 @@ The admin secret (`ADMIN_SECRET` environment variable) provides full access to:
 |---------|----------------|--------------|
 | View pipelines & metadata | ✅ | ✅ |
 | View jobs & logs | ✅ | ✅ |
-| Query certified silver tables | ✅ | ✅ |
+| Query certified silver tables (SELECT, paginated) | ✅ | ✅ |
+| Export full certified silver table (CSV / Parquet) | ✅ | ✅ |
 | Query uncertified tables | ❌ | ✅ |
 | Query bronze/gold tables | ❌ | ✅ |
 | Execute pipelines | ❌ | ✅ |
@@ -73,13 +75,34 @@ The admin secret (`ADMIN_SECRET` environment variable) provides full access to:
 
 ## Usage Examples
 
-### Regular User - Query Certified Table
+### Regular User - Query Certified Table (paginated)
 ```bash
-# Works if table is certified
+# Page 1 — up to 10 000 rows
 curl -X POST https://odace.services.d4g.fr/api/data/query \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"sql": "SELECT * FROM silver_dim_commune LIMIT 10"}'
+  -d '{"sql": "SELECT * FROM dim_commune WHERE code_departement = 75", "limit": 5000, "offset": 0}'
+
+# Page 2 — next 5 000 rows (only when has_more=true)
+curl -X POST https://odace.services.d4g.fr/api/data/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"sql": "SELECT * FROM dim_commune WHERE code_departement = 75", "limit": 5000, "offset": 5000}'
+```
+
+Non-SELECT statements (INSERT, UPDATE, DROP, …) return HTTP 403 for regular users.
+
+### Regular User - Export Full Table
+```bash
+# Download full table as CSV (no row limit)
+curl -X GET "https://odace.services.d4g.fr/api/data/export/dim_commune" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -o dim_commune.csv
+
+# Download full table as Parquet
+curl -X GET "https://odace.services.d4g.fr/api/data/export/dim_commune?format=parquet" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -o dim_commune.parquet
 ```
 
 ### Regular User - Try to Run Pipeline
@@ -170,6 +193,6 @@ Response:
 
 ## Summary
 
-The API now properly restricts regular users to **read-only operations** and **certified silver table queries only**. Pipeline execution, file management, and table certification require the **admin secret**.
+The API restricts regular users to **read-only operations** and **SELECT queries / exports on certified silver tables only**. Paginated queries support up to 10 000 rows per page; full-table exports (CSV or Parquet) have no row limit. Pipeline execution, file management, and table certification require the **admin secret**. DDL/DML statements in `POST /api/data/query` return HTTP 403 for non-admin users.
 
 

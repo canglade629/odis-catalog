@@ -1,11 +1,13 @@
 """Data catalog API routes."""
+import io
 import logging
 import time
 from decimal import Decimal
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import List, Optional, Dict, Any
+from typing import AsyncIterator, List, Optional, Dict, Any
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 import numpy as np
@@ -46,6 +48,32 @@ def _make_json_serializable(obj: Any) -> Any:
     if isinstance(obj, Decimal):
         return float(obj) if obj.is_finite() else None
     return obj
+
+
+def _is_select_query(sql: str) -> bool:
+    """Return True only for SELECT or WITH (CTE) statements; block DDL/DML."""
+    first_word = sql.strip().split()[0].upper() if sql.strip() else ""
+    return first_word in ("SELECT", "WITH")
+
+
+def _load_certified_silver_tables(executor: SQLExecutor, certified_names: list, settings: Any) -> None:
+    """Register certified silver Delta tables into a DuckDB executor instance."""
+    for name in certified_names:
+        try:
+            executor.register_delta_table(name, settings.get_silver_path(name))
+        except Exception as e:
+            logger.warning("Could not register silver table %s for query: %s", name, e)
+
+
+def _load_all_tables(executor: SQLExecutor, catalogue: Dict[str, Any], settings: Any) -> None:
+    """Register all catalogue tables (all layers) into a DuckDB executor instance."""
+    for name in catalogue.get("tables", {}):
+        for get_path in (settings.get_silver_path, settings.get_bronze_path, settings.get_gold_path):
+            try:
+                executor.register_delta_table(name, get_path(name))
+                break
+            except Exception:
+                continue
 
 
 async def verify_table_access(
@@ -155,6 +183,7 @@ class QueryRequest(BaseModel):
     """Request for SQL query execution."""
     sql: str
     limit: int = 1000
+    offset: int = 0
 
 
 class QueryResponse(BaseModel):
@@ -162,6 +191,8 @@ class QueryResponse(BaseModel):
     columns: List[str]
     data: List[Dict[str, Any]]
     row_count: int
+    offset: int
+    has_more: bool
     execution_time_ms: float
 
 
@@ -572,16 +603,130 @@ async def execute_sql_query(
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
-    """SQL queries against the data lake are not available in read-only mode.
+    """Execute a SQL SELECT query against the data lake with cursor-style pagination.
 
-    Use GET /api/data/catalog/silver/{table_name} to explore table schemas and previews.
+    Regular users may only run SELECT statements against certified silver tables.
+    Admin users may run any SQL against all available tables.
+    Results are capped at min(requested limit, 10 000) rows per page.
+    Use `offset` to paginate through large result sets.
+    `has_more=true` in the response indicates another page exists.
     """
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "SQL queries against the data lake are not available in read-only mode. "
-            "Use GET /api/data/catalog/silver/{table_name} to explore table schemas and previews."
-        ),
+    if not current_user.is_admin and not _is_select_query(query_req.sql):
+        raise HTTPException(
+            status_code=403,
+            detail="Only SELECT queries are allowed for non-admin users.",
+        )
+
+    settings = get_settings()
+    executor = SQLExecutor()
+    try:
+        catalogue = await load_catalogue_from_db(session)
+
+        if current_user.is_admin:
+            _load_all_tables(executor, catalogue, settings)
+        else:
+            certified_names = [
+                name
+                for name, meta in catalogue.get("tables", {}).items()
+                if meta.get("certified")
+            ]
+            if not certified_names:
+                raise HTTPException(
+                    status_code=503,
+                    detail="No certified tables are available. Please contact an administrator.",
+                )
+            _load_certified_silver_tables(executor, certified_names, settings)
+
+        limit = min(query_req.limit, 10_000)
+        offset = max(query_req.offset, 0)
+        # Fetch limit+1 rows to detect whether more pages exist without a COUNT(*)
+        wrapped_sql = (
+            f"SELECT * FROM ({query_req.sql}) __q"
+            f" LIMIT {limit + 1} OFFSET {offset}"
+        )
+
+        start = time.time()
+        result_df = executor.execute_query(wrapped_sql)
+        elapsed_ms = (time.time() - start) * 1000
+
+        has_more = len(result_df) > limit
+        result_df = result_df.head(limit)
+
+        records = _make_json_serializable(result_df.to_dict(orient="records"))
+        return QueryResponse(
+            columns=list(result_df.columns),
+            data=records,
+            row_count=len(records),
+            offset=offset,
+            has_more=has_more,
+            execution_time_ms=elapsed_ms,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("SQL query execution failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=400, detail=f"Query failed: {str(e)}")
+    finally:
+        executor.close()
+
+
+@router.get("/export/{table}", tags=["data"])
+@limiter.limit("10/minute")
+async def export_table(
+    request: Request,
+    table: str,
+    format: str = "csv",
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Stream a full certified silver table as CSV or Parquet.
+
+    Regular users can export any certified silver table with no row limit.
+    Admin users can export any table.
+    Pass `?format=parquet` to receive a Parquet file instead of CSV.
+    """
+    if format not in ("csv", "parquet"):
+        raise HTTPException(status_code=400, detail="format must be 'csv' or 'parquet'.")
+
+    await verify_table_access("silver", table, session, current_user)
+
+    settings = get_settings()
+    table_path = settings.get_silver_path(table)
+
+    try:
+        df = DeltaOperations.read_delta(table_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
+    except Exception as e:
+        logger.error("Export failed for table %s: %s", table, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to read table: {str(e)}")
+
+    if format == "parquet":
+        buf = io.BytesIO()
+        df.to_parquet(buf, index=False)
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f"attachment; filename={table}.parquet"},
+        )
+
+    # CSV — stream in 10 000-row chunks to keep memory flat
+    def _csv_chunks():
+        header_written = False
+        chunk_size = 10_000
+        for start in range(0, max(len(df), 1), chunk_size):
+            chunk = df.iloc[start : start + chunk_size]
+            buf = io.StringIO()
+            chunk.to_csv(buf, index=False, header=not header_written)
+            header_written = True
+            yield buf.getvalue()
+
+    return StreamingResponse(
+        _csv_chunks(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={table}.csv"},
     )
 
 
