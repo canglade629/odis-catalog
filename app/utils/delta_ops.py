@@ -108,7 +108,10 @@ class DeltaOperations:
         if _is_parquet_path(table_path):
             return DeltaOperations.read_parquet(table_path)
         table = _load_iceberg_table(table_path)
-        scan = table.scan(selected_fields=tuple(columns) if columns else None)
+        if columns:
+            scan = table.scan(selected_fields=tuple(columns))
+        else:
+            scan = table.scan()
         df = scan.to_pandas()
         logger.info("Read %d rows from Iceberg table", len(df))
         return df

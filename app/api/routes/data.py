@@ -22,7 +22,7 @@ from app.core.rate_limiter import limiter
 from app.core.pipeline_registry import get_registry
 from app.core.config_loader import get_config_loader
 from app.core.models import PipelineLayer
-from app.core.certification_manager import is_table_certified, get_certification_status
+from app.core.certification_manager import get_certification_status
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ async def verify_table_access(
     Verify that the user has access to the specified table.
     
     - Admins (current_user.is_admin) can access any table
-    - Regular users can only access certified silver tables
+    - Regular users can access all silver tables (certification temporarily disabled)
     - Bronze and gold tables require admin access
     
     Raises HTTPException if access is denied.
@@ -94,21 +94,21 @@ async def verify_table_access(
     if current_user.is_admin:
         return
     
-    # Only silver tables can be accessed by non-admins (if certified)
+    # Only silver tables can be accessed by non-admins.
     if layer != "silver":
         raise HTTPException(
             status_code=403,
             detail=f"Access to {layer} tables requires admin privileges"
         )
-    
-    # Check if the silver table is certified
-    certified = await is_table_certified(layer, table_name, session)
-    
-    if not certified:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Table {table_name} is not certified for public use. Please contact an administrator."
-        )
+
+    # Certification restriction temporarily disabled.
+    # Re-enable this block when certified-only access is required again:
+    # certified = await is_table_certified(layer, table_name, session)
+    # if not certified:
+    #     raise HTTPException(
+    #         status_code=403,
+    #         detail=f"Table {table_name} is not certified for public use. Please contact an administrator."
+    #     )
 
 async def load_catalogue_from_db(session: AsyncSession) -> Dict[str, Any]:
     """Load the data catalogue from PostgreSQL. Falls back to empty if not found."""
