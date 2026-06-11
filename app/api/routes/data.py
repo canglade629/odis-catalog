@@ -19,9 +19,6 @@ from app.core.config import get_settings
 from app.utils.delta_ops import DeltaOperations
 from app.utils.sql_executor import SQLExecutor
 from app.core.rate_limiter import limiter
-from app.core.pipeline_registry import get_registry
-from app.core.config_loader import get_config_loader
-from app.core.models import PipelineLayer
 from app.core.certification_manager import get_certification_status
 
 logger = logging.getLogger(__name__)

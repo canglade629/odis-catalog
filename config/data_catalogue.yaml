@@ -58,6 +58,26 @@ tables:
         example: '{"job_insert_id": "silver_geo", "job_insert_date_utc": "2025-12-03T17:26:51.089Z", "job_modify_id": "silver_geo", "job_modify_date_utc": "2025-12-03T17:26:51.089Z", "ingestion_timestamp": "2025-12-03T15:00:00.000Z"}'
 
 
+  dim_equipement_territoire:
+    category: "geo"
+    description: "Table de dimension des équipements par territoire avec capacités associées."
+    row_count: 0
+    sources:
+      - name: "Pipeline DBT externe"
+        description: "Métadonnées publiées par le projet DBT externe dans PostgreSQL."
+    fields:
+      capacity:
+        type: integer
+        nullable: true
+        description: "Capacité de l'équipement (nombre de places ou unités selon le type d'équipement)."
+        example: 120
+
+      job_metadata:
+        type: json
+        nullable: true
+        description: "Métadonnées techniques de traçabilité du chargement."
+
+
   ref_logement_profil:
     category: "logement"
     description: "Table de référence des profils de biens immobiliers (type, typologie, surfaces) pour les données 2024. Utilisée pour jointure via logement_profil_sk."

@@ -1,6 +1,0 @@
-# Gold Layer Pipeline Configuration
-# Business aggregations and metrics
-
-pipelines: []
-# Future use for business-level aggregations
-

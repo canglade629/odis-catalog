@@ -14,7 +14,7 @@ from app.core.auth import get_current_user, AuthenticatedUser
 from app.core.config import get_settings
 from app.core.models import HealthResponse
 from app.core.rate_limiter import limiter
-from app.api.routes import bronze, silver, gold, pipeline, files, data, jobs, admin, docs
+from app.api.routes import data, admin, docs
 
 # Configure logging
 logging.basicConfig(
@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
-    title="Odace Data Pipeline API",
-    description="Platform-agnostic data pipeline for bronze/silver/gold layers",
+    title="Odace Data API",
+    description="Data catalogue and query API",
     version="1.0.0"
 )
 
@@ -49,13 +49,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Include routers
-app.include_router(bronze.router)
-app.include_router(silver.router)
-app.include_router(gold.router)
-app.include_router(pipeline.router)
-app.include_router(files.router)
 app.include_router(data.router)
-app.include_router(jobs.router)
 app.include_router(admin.router)
 app.include_router(docs.router)
 
@@ -70,7 +64,7 @@ async def root():
     except Exception as e:
         logger.warning("Could not serve index.html: %s", e)
     return HTMLResponse(
-        content="<h1>Odace Data Pipeline API</h1><p><a href='/docs'>/docs</a> – API documentation</p><p><a href='/health'>/health</a> – Health check</p>",
+        content="<h1>Odace Data API</h1><p><a href='/docs'>/docs</a> – API documentation</p><p><a href='/health'>/health</a> – Health check</p>",
         status_code=200,
     )
 
@@ -95,7 +89,7 @@ async def health_check():
 async def startup_event():
     """Startup event handler."""
     settings = get_settings()
-    logger.info("Starting Odace Data Pipeline API")
+    logger.info("Starting Odace Data API")
     logger.info("Environment: %s", settings.environment)
     logger.info("S3 Bucket: %s", settings.scw_bucket_name)
     try:
@@ -105,33 +99,13 @@ async def startup_event():
     except Exception as e:
         logger.warning("Database init skipped or failed: %s", e)
     
-    # Load pipelines from YAML configuration
-    from app.core.config_loader import get_config_loader
-    from app.core.pipeline_registry import register_pipelines_from_yaml, get_registry
-    from app.core.models import PipelineLayer
-    
-    try:
-        config_loader = get_config_loader()
-        register_pipelines_from_yaml(config_loader)
-        
-        # Log registered pipelines (bronze only; silver/gold run via DBT)
-        registry = get_registry()
-        bronze_pipelines = registry.list_pipelines(layer=PipelineLayer.BRONZE)
-        gold_pipelines = registry.list_pipelines(layer=PipelineLayer.GOLD)
-        
-        logger.info(f"Registered {len(bronze_pipelines)} bronze pipelines")
-        logger.info(f"Silver/Gold: run via DBT project (dbt/)")
-        logger.info(f"Bronze pipelines: {[p.name for p in bronze_pipelines]}")
-        
-    except Exception as e:
-        logger.error(f"Error loading pipelines from YAML: {e}", exc_info=True)
-        logger.warning("Continuing without YAML-configured pipelines")
+    logger.info("Startup completed")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event handler."""
-    logger.info("Shutting down Odace Data Pipeline API")
+    logger.info("Shutting down Odace Data API")
 
 
 if __name__ == "__main__":

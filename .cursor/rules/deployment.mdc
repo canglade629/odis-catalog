@@ -1,10 +1,10 @@
 ---
 alwaysApply: true
 ---
-Our main front end should be deployed in Cloud run in a single service. The backend should be all APIs and also hosted on the same Cloud Run service. I should be able to call those backend API to launch jobs, observe status, monitor etc...
+Deploy the frontend and backend API together as a single service on Coolify.
 
-All deployements should be done through Terraform. Don't forget to update those terraform scripts if needed when developing new features.
+Do not use Cloud Run, Cloud Build, or Terraform for deployments in this repository.
 
-Always build docker images locally and not in Cloud Build. Then push to cloud run.
+Build Docker images locally, then deploy through the existing Coolify workflow.
 
-Deploy to the existing Cloud Run service odace-pipeline
+The app runtime uses Scaleway S3 + PostgreSQL (Coolify-managed infrastructure).

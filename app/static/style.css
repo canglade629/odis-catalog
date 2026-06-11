@@ -96,19 +96,8 @@
 .btn-danger { background-color: #dc2626; color: white; border: none; }
 .btn-danger:hover { background-color: #b91c1c; box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3); }
 
-/* Running timer animation */
-.running-timer { color: #2563eb; font-weight: 600; animation: pulse-timer 2s ease-in-out infinite; }
-@keyframes pulse-timer {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-}
-
 /* Admin-only tabs (JS toggles visibility) */
 [data-admin-only="true"] { display: none; }
-
-/* Auto-refresh button active state */
-#autoRefreshBtn.active { background-color: #22c55e; color: white; }
-#autoRefreshBtn.active:hover { background-color: #16a34a; }
 
 /* Doc content (markdown from API) */
 .doc-content h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 1.5rem; padding-bottom: 0.5rem; border-bottom: 2px solid rgb(64 64 64); color: #262626; }
@@ -131,30 +120,10 @@
 .doc-content .mermaid { background: white; padding: 20px; border-radius: 8px; margin: 2rem 0; display: flex; justify-content: center; border: 1px solid #e5e5e5; }
 .doc-content hr { border: none; border-top: 2px solid #e5e5e5; margin: 3rem 0; }
 
-/* Terminal log level colors (JS injects .log-level-*) */
-.log-level-DEBUG { color: #888; }
-.log-level-INFO { color: #4ec9b0; }
-.log-level-WARNING { color: #dcdcaa; }
-.log-level-ERROR { color: #f48771; }
-.log-level-CRITICAL { color: #ef4444; font-weight: 700; }
-.log-separator { color: #555; margin: 10px 0; border-top: 1px solid #333; padding-top: 10px; }
-
-/* Dynamically generated: job modal, tasks table, schema, preview, tree */
-.job-modal-meta { background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 6px; padding: 15px; margin-bottom: 25px; display: flex; gap: 30px; flex-wrap: wrap; }
-.job-modal-meta .meta-item { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; }
-.job-modal-meta .meta-item strong { color: #737373; font-weight: 500; }
+/* Dynamically generated: schema, preview, tree */
 .modal-section { margin-bottom: 30px; }
 .modal-section:last-child { margin-bottom: 0; }
 .modal-section h3 { font-size: 1.1rem; font-weight: 600; color: #262626; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #e5e5e5; text-transform: uppercase; letter-spacing: 0.5px; }
-.loading-tasks { text-align: center; color: #737373; padding: 40px 20px; font-style: italic; }
-
-.tasks-table { width: 100%; border-collapse: collapse; background: white; border-radius: 6px; overflow: hidden; }
-.tasks-table thead { background: #fafafa; }
-.tasks-table th { padding: 12px 15px; text-align: left; font-weight: 600; font-size: 0.9rem; color: #262626; border-bottom: 2px solid #e5e5e5; }
-.tasks-table td { padding: 12px 15px; border-bottom: 1px solid #e5e5e5; color: #737373; font-size: 0.9rem; }
-.tasks-table tbody tr:last-child td { border-bottom: none; }
-.tasks-table tbody tr:hover { background: #f5f5f5; }
-.task-message { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .tree-layer-header { padding: 10px; background: #f5f5f5; border-radius: 4px; cursor: pointer; font-weight: 600; color: #262626; display: flex; align-items: center; gap: 6px; transition: background 0.2s; text-transform: uppercase; font-size: 0.9rem; }
 .tree-layer-header:hover { background: #e5e5e5; }
@@ -204,27 +173,6 @@
 .control-group input:focus, .control-group select:focus { outline: none; border-color: rgb(64 64 64); }
 .control-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .control-buttons .btn { width: 100%; justify-content: center; }
-
-/* Pipeline cards (JS createPipelineCard) */
-.pipeline-card { background: #f5f5f5; padding: 20px; border-radius: 6px; border: 1px solid #e5e5e5; transition: all 0.2s; }
-.pipeline-card:hover { border-color: rgb(64 64 64); box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-.pipeline-card h4 { font-size: 1rem; font-weight: 600; color: #262626; margin-bottom: 8px; }
-.pipeline-card p { font-size: 0.9rem; color: #737373; margin-bottom: 15px; min-height: 40px; }
-
-/* Job list (JS createJobItem) */
-.job-item { background: white; border: 1px solid #e5e5e5; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.12); transition: box-shadow 0.2s; }
-.job-item:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
-.job-header { display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; padding: 20px; }
-.job-main-info { display: flex; flex-direction: column; gap: 8px; }
-.job-name-status { display: flex; align-items: center; gap: 12px; }
-.job-name-status h4 { font-size: 1.05rem; font-weight: 600; color: #262626; margin: 0; }
-.job-meta { display: flex; gap: 20px; font-size: 0.9rem; color: #737373; }
-.job-date, .job-tasks, .job-user { display: flex; align-items: center; }
-.job-user { font-weight: 500; color: #262626; }
-.job-actions { display: flex; gap: 10px; align-items: center; }
-
-/* File list */
-.file-list li { padding: 12px 15px; background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 4px; margin-bottom: 8px; color: #737373; font-family: ui-monospace, monospace; font-size: 0.9rem; }
 
 /* Catalog cards (silver catalog grid) – modern card style */
 .catalog-card {
@@ -390,7 +338,6 @@
     .data-catalog-container { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
     .catalog-tree { max-height: 300px; }
     .sql-query-container { grid-template-columns: 1fr; }
-    .job-header { grid-template-columns: 1fr; gap: 15px; }
     .doc-content { padding: 20px; }
     .doc-content h1 { font-size: 2rem; }
     .doc-content h2 { font-size: 1.5rem; }

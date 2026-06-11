@@ -51,18 +51,35 @@ async def main():
 
     catalogue_data = load_catalogue_yaml(catalogue_path)
     sync_time = datetime.now(timezone.utc)
-    document = {
-        "tables": catalogue_data.get("tables", {}),
-        "version": catalogue_data.get("version", "unknown"),
-        "generated_at": catalogue_data.get("generated_at", ""),
-        "last_synced": sync_time.isoformat(),
-        "source_file": "data_catalogue.yaml",
-    }
 
     try:
         get_settings()  # ensure config loaded
         factory = async_session_factory()
         async with factory() as session:
+            existing_doc = await catalogue_repo.get(session) or {}
+
+            merged_tables = dict(existing_doc.get("tables", {}))
+            for table_name, yaml_entry in catalogue_data.get("tables", {}).items():
+                existing_entry = dict(merged_tables.get(table_name, {}))
+
+                for key in ("description", "category", "sources", "fields"):
+                    if key in yaml_entry:
+                        existing_entry[key] = yaml_entry.get(key)
+
+                if "row_count" in yaml_entry and "row_count" not in existing_entry:
+                    existing_entry["row_count"] = yaml_entry.get("row_count")
+
+                merged_tables[table_name] = existing_entry
+
+            document = {
+                **existing_doc,
+                "tables": merged_tables,
+                "version": catalogue_data.get("version", existing_doc.get("version", "unknown")),
+                "generated_at": catalogue_data.get("generated_at", existing_doc.get("generated_at", "")),
+                "last_synced": sync_time.isoformat(),
+                "source_file": "data_catalogue.yaml",
+            }
+
             await catalogue_repo.set(session, document)
             await session.commit()
         num = len(document.get("tables", {}))

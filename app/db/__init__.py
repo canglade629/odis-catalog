@@ -4,12 +4,8 @@ from app.db.models import (
     ApiKey,
     DataCatalogue,
     TableCertification,
-    Job,
-    JobTask,
-    JobLog,
     QueryTracker,
 )
-from app.db.repositories.job_logs import job_log_repo
 
 __all__ = [
     "get_db",
@@ -18,9 +14,5 @@ __all__ = [
     "ApiKey",
     "DataCatalogue",
     "TableCertification",
-    "Job",
-    "JobTask",
-    "JobLog",
     "QueryTracker",
-    "job_log_repo",
 ]
