@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import DataCatalogue
 
 CATALOGUE_META_ID = "_catalogue_meta"
+LEGACY_CATALOGUE_ID = "silver_tables"
 
 
 class CatalogueRepository:
@@ -21,7 +22,9 @@ class CatalogueRepository:
     async def list_table_rows(self, session: AsyncSession) -> List[Tuple[str, Dict[str, Any]]]:
         """List all per-table catalogue rows (excluding global meta row)."""
         result = await session.execute(
-            select(DataCatalogue).where(DataCatalogue.id != CATALOGUE_META_ID)
+            select(DataCatalogue).where(
+                DataCatalogue.id.notin_([CATALOGUE_META_ID, LEGACY_CATALOGUE_ID])
+            )
         )
         rows = result.scalars().all()
         return [(row.id, row.document or {}) for row in rows]
