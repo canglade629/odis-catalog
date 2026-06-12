@@ -42,9 +42,15 @@ class SQLExecutor:
         """Register an Iceberg table lazily as a DuckDB view."""
         try:
             self._ensure_iceberg_extensions()
+            # DuckDB httpfs prepends https:// itself, so strip any scheme from the endpoint
+            endpoint = s3_config["endpoint"]
+            for scheme in ("https://", "http://"):
+                if endpoint.startswith(scheme):
+                    endpoint = endpoint[len(scheme):]
+                    break
             self.conn.execute(
                 "SET s3_endpoint = ?",
-                [s3_config["endpoint"]],
+                [endpoint],
             )
             self.conn.execute(
                 "SET s3_access_key_id = ?",
