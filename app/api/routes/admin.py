@@ -23,6 +23,8 @@ from app.core.certification_manager import (
     get_certification_status,
     get_all_certifications
 )
+from app.core.config import get_settings
+from app.utils.iceberg_ops import invalidate_metadata_cache
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +98,21 @@ class CatalogueRefreshResponse(BaseModel):
     tables_synced: int
     last_synced: str
     version: str
+
+
+class RuntimeCacheInvalidateRequest(BaseModel):
+    """Request model for runtime metadata cache invalidation."""
+    all: bool = False
+    layer: Optional[str] = "silver"
+    table_name: Optional[str] = None
+
+
+class RuntimeCacheInvalidateResponse(BaseModel):
+    """Response model for runtime metadata cache invalidation."""
+    status: str
+    scope: str
+    table_path: Optional[str] = None
+    message: str
 
 
 @router.post("/api-keys", response_model=CreateAPIKeyResponse, status_code=status.HTTP_201_CREATED)
@@ -352,4 +369,58 @@ async def debug_s3_ls(
     full_prefix = f"s3://{settings.scw_bucket_name}/{prefix.lstrip('/')}"
     files = s3.list_files(full_prefix)
     return {"prefix": full_prefix, "count": len(files), "files": files[:100]}
+
+
+@router.post("/runtime-cache/invalidate", response_model=RuntimeCacheInvalidateResponse)
+@limiter.limit("30/hour")
+async def invalidate_runtime_cache(
+    request: Request,
+    payload: RuntimeCacheInvalidateRequest,
+):
+    """Invalidate runtime Iceberg metadata cache used by SQL query endpoints."""
+    try:
+        if payload.all:
+            invalidate_metadata_cache()
+            return RuntimeCacheInvalidateResponse(
+                status="success",
+                scope="all",
+                table_path=None,
+                message="Runtime metadata cache invalidated for all tables.",
+            )
+
+        if not payload.table_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="table_name is required when all=false",
+            )
+
+        layer = (payload.layer or "silver").lower()
+        settings = get_settings()
+        if layer == "silver":
+            table_path = settings.get_silver_path(payload.table_name)
+        elif layer == "bronze":
+            table_path = settings.get_bronze_path(payload.table_name)
+        elif layer == "gold":
+            table_path = settings.get_gold_path(payload.table_name)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="layer must be one of: bronze, silver, gold",
+            )
+
+        invalidate_metadata_cache(table_path)
+        return RuntimeCacheInvalidateResponse(
+            status="success",
+            scope="table",
+            table_path=table_path,
+            message=f"Runtime metadata cache invalidated for {layer}.{payload.table_name}.",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to invalidate runtime metadata cache: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to invalidate runtime metadata cache: {str(e)}",
+        )
 

@@ -88,6 +88,14 @@
         "security": [{ "HTTPBearer": [] }],
         "responses": { "200": { "description": "Refresh status" } }
       }
+    },
+    "/admin/runtime-cache/invalidate": {
+      "post": {
+        "summary": "Invalidate runtime Iceberg metadata cache",
+        "description": "Admin endpoint to invalidate the in-process metadata cache used by /api/data/query. Use { \"all\": true } to invalidate all cached table paths, or pass { \"layer\": \"silver\", \"table_name\": \"...\" } for targeted invalidation.",
+        "security": [{ "HTTPBearer": [] }],
+        "responses": { "200": { "description": "Cache invalidation status" } }
+      }
     }
   },
   "components": {
