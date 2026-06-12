@@ -41,7 +41,7 @@ def _strip_s3_prefix(path: str, bucket: str) -> str:
     return path[len(prefix):] if path.startswith(prefix) else path
 
 
-def _find_latest_metadata(table_path: str) -> Optional[str]:
+def find_latest_metadata(table_path: str) -> Optional[str]:
     """
     Scan {table_path}/metadata/ on S3 and return the path of the most recent
     *.metadata.json file.  Iceberg writes files as:
@@ -75,7 +75,7 @@ def _load_iceberg_table(table_path: str):
     """Load a PyIceberg StaticTable from the latest metadata file."""
     from pyiceberg.table import StaticTable
 
-    metadata_path = _find_latest_metadata(table_path)
+    metadata_path = find_latest_metadata(table_path)
     if not metadata_path:
         raise FileNotFoundError(f"No Iceberg metadata found at {table_path}/metadata/")
 
@@ -126,7 +126,7 @@ class DeltaOperations:
                 return True
             except Exception:
                 return False
-        return _find_latest_metadata(table_path) is not None
+        return find_latest_metadata(table_path) is not None
 
     @staticmethod
     def list_delta_tables(base_path: str) -> List[Dict[str, Any]]:

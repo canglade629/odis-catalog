@@ -1,7 +1,9 @@
 """Data catalog API routes."""
 import io
 import logging
+import re
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from decimal import Decimal
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
@@ -16,7 +18,7 @@ from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or
 from app.db.session import get_db
 from app.db.repositories.catalogue import catalogue_repo
 from app.core.config import get_settings
-from app.utils.delta_ops import DeltaOperations
+from app.utils.delta_ops import DeltaOperations, find_latest_metadata
 from app.utils.sql_executor import SQLExecutor
 from app.core.rate_limiter import limiter
 from app.core.certification_manager import get_certification_status
@@ -24,6 +26,9 @@ from app.core.certification_manager import get_certification_status
 logger = logging.getLogger(__name__)
 
 security = HTTPBearer(auto_error=False)
+
+MAX_TABLES_PER_QUERY = 10
+QUERY_TIMEOUT_SECONDS = 60
 
 
 def _make_json_serializable(obj: Any) -> Any:
@@ -51,6 +56,14 @@ def _is_select_query(sql: str) -> bool:
     """Return True only for SELECT or WITH (CTE) statements; block DDL/DML."""
     first_word = sql.strip().split()[0].upper() if sql.strip() else ""
     return first_word in ("SELECT", "WITH")
+
+
+def _extract_table_names(sql: str, known_tables: List[str]) -> List[str]:
+    """Extract referenced table names by intersecting SQL tokens with known table names."""
+    tokens = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", sql.lower()))
+    lower_to_actual = {name.lower(): name for name in known_tables}
+    matched = [lower_to_actual[token] for token in tokens if token in lower_to_actual]
+    return sorted(set(matched))
 
 
 def _load_certified_silver_tables(executor: SQLExecutor, certified_names: list, settings: Any) -> None:
@@ -618,13 +631,42 @@ async def execute_sql_query(
     executor = SQLExecutor()
     try:
         catalogue = await load_catalogue_from_db(session)
+        all_silver_names = list(catalogue.get("tables", {}).keys())
+        referenced_tables = _extract_table_names(query_req.sql, all_silver_names)
 
-        if current_user.is_admin:
-            _load_all_tables(executor, catalogue, settings)
-        else:
-            # Load all silver tables (certification restriction temporarily disabled)
-            all_silver_names = list(catalogue.get("tables", {}).keys())
-            _load_certified_silver_tables(executor, all_silver_names, settings)
+        if len(referenced_tables) > MAX_TABLES_PER_QUERY:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Query references {len(referenced_tables)} tables "
+                    f"(max allowed is {MAX_TABLES_PER_QUERY})."
+                ),
+            )
+
+        if not current_user.is_admin:
+            disallowed = [name for name in referenced_tables if name not in all_silver_names]
+            if disallowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Only silver tables are allowed for non-admin users: {', '.join(disallowed)}",
+                )
+
+        s3_config = {
+            "endpoint": settings.scw_object_storage_endpoint,
+            "access_key_id": settings.scw_access_key,
+            "secret_access_key": settings.scw_secret_key,
+            "region": settings.scw_region,
+        }
+
+        for table_name in referenced_tables:
+            table_path = settings.get_silver_path(table_name)
+            metadata_path = find_latest_metadata(table_path)
+            if not metadata_path:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Could not find Iceberg metadata for table: {table_name}",
+                )
+            executor.register_iceberg_view(table_name, metadata_path, s3_config)
 
         limit = min(query_req.limit, 10_000)
         offset = max(query_req.offset, 0)
@@ -635,7 +677,15 @@ async def execute_sql_query(
         )
 
         start = time.time()
-        result_df = executor.execute_query(wrapped_sql)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(executor.execute_query, wrapped_sql)
+            try:
+                result_df = future.result(timeout=QUERY_TIMEOUT_SECONDS)
+            except FuturesTimeout:
+                raise HTTPException(
+                    status_code=504,
+                    detail=f"Query timed out after {QUERY_TIMEOUT_SECONDS}s.",
+                )
         elapsed_ms = (time.time() - start) * 1000
 
         has_more = len(result_df) > limit

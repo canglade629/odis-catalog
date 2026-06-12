@@ -1,4 +1,4 @@
-"""SQL execution using DuckDB with Delta Lake support."""
+"""SQL execution using DuckDB with Delta and Iceberg support."""
 import duckdb
 import pandas as pd
 from typing import Optional, Dict, Any
@@ -9,11 +9,12 @@ logger = logging.getLogger(__name__)
 
 
 class SQLExecutor:
-    """Execute SQL queries using DuckDB with Delta Lake support."""
+    """Execute SQL queries using DuckDB with Delta and Iceberg support."""
     
     def __init__(self):
         """Initialize DuckDB connection."""
         self.conn = duckdb.connect(":memory:")
+        self._iceberg_ready = False
         # Install and load delta extension
         try:
             self.conn.execute("INSTALL delta")
@@ -21,6 +22,54 @@ class SQLExecutor:
             logger.info("DuckDB Delta extension loaded")
         except Exception as e:
             logger.warning(f"Could not load Delta extension: {e}")
+
+    @staticmethod
+    def _quote_literal(value: str) -> str:
+        """Escape a SQL string literal for DuckDB SET statements."""
+        return value.replace("'", "''")
+
+    def _ensure_iceberg_extensions(self) -> None:
+        """Install/load Iceberg + HTTPFS only once per executor."""
+        if self._iceberg_ready:
+            return
+        self.conn.execute("INSTALL httpfs")
+        self.conn.execute("LOAD httpfs")
+        self.conn.execute("INSTALL iceberg")
+        self.conn.execute("LOAD iceberg")
+        self._iceberg_ready = True
+
+    def register_iceberg_view(self, table_name: str, metadata_path: str, s3_config: Dict[str, str]) -> None:
+        """Register an Iceberg table lazily as a DuckDB view."""
+        try:
+            self._ensure_iceberg_extensions()
+            self.conn.execute(
+                "SET s3_endpoint = ?",
+                [s3_config["endpoint"]],
+            )
+            self.conn.execute(
+                "SET s3_access_key_id = ?",
+                [s3_config["access_key_id"]],
+            )
+            self.conn.execute(
+                "SET s3_secret_access_key = ?",
+                [s3_config["secret_access_key"]],
+            )
+            self.conn.execute(
+                "SET s3_region = ?",
+                [s3_config["region"]],
+            )
+            self.conn.execute("SET s3_url_style='path'")
+
+            # Avoid collision if view already exists in this executor.
+            self.conn.execute(f"DROP VIEW IF EXISTS {table_name}")
+            self.conn.execute(
+                f"CREATE VIEW {table_name} AS SELECT * FROM iceberg_scan(?)",
+                [metadata_path],
+            )
+            logger.info("Registered Iceberg view %s from %s", table_name, metadata_path)
+        except Exception as e:
+            logger.error("Failed to register Iceberg view %s: %s", table_name, e)
+            raise
     
     def register_delta_table(self, table_name: str, delta_path: str) -> None:
         """
@@ -28,7 +77,7 @@ class SQLExecutor:
         
         Args:
             table_name: Name to use in SQL queries
-            delta_path: Path to Delta table (gs://...)
+            delta_path: Path to table (s3://...)
         """
         try:
             # Read Delta table as pandas DataFrame
