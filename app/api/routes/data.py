@@ -16,7 +16,7 @@ import sqlglot
 
 from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin, get_current_user, AuthenticatedUser
 from app.db.session import get_db
-from app.db.repositories.catalogue import catalogue_repo
+from app.db.repositories.catalogue import catalogue_repo, CATALOGUE_META_ID
 from app.core.config import get_settings
 from app.utils.iceberg_ops import find_latest_metadata
 from app.utils.sql_executor import get_sql_executor
@@ -118,17 +118,26 @@ async def verify_table_access(
     #     )
 
 async def load_catalogue_from_db(session: AsyncSession) -> Dict[str, Any]:
-    """Load the data catalogue from PostgreSQL. Falls back to empty if not found."""
+    """Build a compatibility in-memory view from V2 per-table catalogue rows."""
     try:
-        data = await catalogue_repo.get(session)
-        if data:
-            logger.info("Loaded catalogue from DB with %d tables", len(data.get("tables", {})))
-            return data
-        logger.warning("Catalogue document not found in DB")
-        return {"tables": {}}
+        rows = await catalogue_repo.list_table_rows(session)
+        meta = await catalogue_repo.get_meta_row(session) or {}
+        tables = {table_id: document for table_id, document in rows}
+        logger.info("Loaded V2 catalogue rows from DB with %d tables", len(tables))
+        return {"tables": tables, "_catalogue_meta": meta}
     except Exception as e:
         logger.error("Error loading catalogue from DB: %s", e)
         return {"tables": {}}
+
+
+async def load_silver_catalog_rows(session: AsyncSession) -> List[tuple[str, Dict[str, Any]]]:
+    """Load all table rows from V2 data_catalogue model."""
+    return await catalogue_repo.list_table_rows(session)
+
+
+async def load_catalogue_meta(session: AsyncSession) -> Dict[str, Any]:
+    """Load _catalogue_meta row from V2 data_catalogue model."""
+    return await catalogue_repo.get_meta_row(session) or {}
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
@@ -217,12 +226,15 @@ class SilverTableInfo(BaseModel):
     certified_at: Optional[str] = None
     certified_by: Optional[str] = None
     query_count: Optional[int] = 0
+    schema_drift: Optional[bool] = None
+    drift_details: Optional[Dict[str, Any]] = None
 
 
 class SilverCatalogResponse(BaseModel):
     """Catalog response for silver tables only."""
     tables: List[SilverTableInfo]
     last_synced: Optional[str] = None
+    drift_report: Optional[Dict[str, Any]] = None
 
 
 class CatalogueRefreshResponse(BaseModel):
@@ -257,6 +269,8 @@ class SilverTableDetail(BaseModel):
     certified: bool = False
     certified_at: Optional[str] = None
     certified_by: Optional[str] = None
+    schema_drift: Optional[bool] = None
+    drift_details: Optional[Dict[str, Any]] = None
 
 
 @router.get("/catalog", response_model=CatalogResponse)
@@ -278,10 +292,10 @@ async def get_catalog(
 
     try:
         # Silver: from pipeline-written data_catalogue document
-        catalogue = await load_catalogue_from_db(session)
+        rows = await load_silver_catalog_rows(session)
         silver_tables = [
             TableInfo(name=name, path=f"silver/{name}", version=0)
-            for name in sorted(catalogue.get("tables", {}).keys())
+            for name, _ in sorted(rows, key=lambda row: row[0])
         ]
 
         # Bronze: from PyIceberg's SqlCatalog (iceberg_tables)
@@ -329,13 +343,17 @@ async def get_silver_catalog(
         from app.utils.query_tracker import get_table_query_count
 
         # Load catalogue from PostgreSQL — single source of truth (written by dbt)
-        catalogue = await load_catalogue_from_db(session)
-        catalogue_tables = catalogue.get('tables', {})
+        rows = await load_silver_catalog_rows(session)
+        meta = await load_catalogue_meta(session)
 
         tables = []
-        for table_name, catalogue_info in sorted(catalogue_tables.items()):
-            row_count = catalogue_info.get("row_count")
-            version = catalogue_info.get("schema", {}).get("version", 0)
+        for table_name, catalogue_info in sorted(rows, key=lambda row: row[0]):
+            business_metadata = catalogue_info.get("business_metadata", {})
+            schema_cache = catalogue_info.get("schema_cache", {})
+            row_count = schema_cache.get("row_count")
+            version = schema_cache.get("version", 0)
+            schema_drift_raw = schema_cache.get("schema_drift")
+            schema_drift = bool(schema_drift_raw) if schema_drift_raw is not None else None
 
             # Get certification status from PostgreSQL (fast)
             cert_status = await get_certification_status("silver", table_name, session)
@@ -347,22 +365,32 @@ async def get_silver_catalog(
                 name=table_name,
                 actual_table_name=table_name,
                 description_fr=(
-                    catalogue_info.get("description")
+                    business_metadata.get("description")
                     or "Description non disponible"
                 ),
-                dependencies=catalogue_info.get("upstream_models") or [],
+                dependencies=business_metadata.get("upstream_models") or [],
                 version=version,
                 row_count=row_count,
-                category=catalogue_info.get("category"),
-                annee_reference=catalogue_info.get("annee_reference"),
+                category=business_metadata.get("category"),
+                annee_reference=business_metadata.get("annee_reference"),
                 certified=cert_status is not None and cert_status.get("certified", False),
                 certified_at=cert_status.get("certified_at") if cert_status else None,
                 certified_by=cert_status.get("certified_by") if cert_status else None,
-                query_count=query_count
+                query_count=query_count,
+                schema_drift=schema_drift,
+                drift_details=schema_cache.get("drift_details"),
             ))
 
-        last_synced = catalogue.get("last_synced") or catalogue.get("generated_at")
-        return SilverCatalogResponse(tables=tables, last_synced=last_synced)
+        last_synced = (
+            meta.get("catalog_generated_at")
+            or meta.get("dbt_manifest_generated_at")
+            or (rows[0][1].get("catalog_generated_at") if rows else None)
+        )
+        return SilverCatalogResponse(
+            tables=tables,
+            last_synced=last_synced,
+            drift_report=meta.get("drift_report"),
+        )
     
     except Exception as e:
         logger.error(f"Error fetching silver catalog: {e}", exc_info=True)
@@ -389,47 +417,44 @@ async def get_silver_table_detail(
     logger.info(f"Fetching details for silver.{table_name}")
 
     try:
-        # Load enriched catalogue from PostgreSQL (includes schema + preview)
-        catalogue = await load_catalogue_from_db(session)
-        logger.info(f"Loaded enriched catalogue from PostgreSQL with {len(catalogue.get('tables', {}))} tables")
-
-        table_catalogue = catalogue.get("tables", {}).get(table_name)
+        table_catalogue = await catalogue_repo.get_table_row(session, table_name)
 
         if not table_catalogue:
             raise HTTPException(status_code=404, detail=f"Table {table_name} not found in catalogue")
-        
-        # Extract schema from cached data
-        cached_schema = table_catalogue.get('schema', {})
-        field_descriptions = table_catalogue.get("fields", {})
-        
-        # Build schema with descriptions merged in
-        fields = []
-        for field in cached_schema.get('fields', []):
-            field_name = field['name']
-            field_desc_info = field_descriptions.get(field_name, {})
-            
-            fields.append(SchemaField(
-                name=field_name,
-                type=field['type'],
-                nullable=field['nullable'],
-                description=field_desc_info.get("description"),
-                example=str(field_desc_info.get("example", "")) if field_desc_info.get("example") else None
-            ))
-        
+
+        # Runtime schema is authoritative and comes from live DuckDB/Iceberg.
+        live_schema = await get_table_metadata(request, "silver", table_name, user_id)
+        field_docs = table_catalogue.get("field_docs", {})
         table_schema = TableSchema(
-            fields=fields,
-            version=cached_schema.get('version', 0),
-            row_count=table_catalogue.get('row_count'),
-            num_fields=cached_schema.get('num_fields', len(fields))
+            fields=[
+                SchemaField(
+                    name=field.name,
+                    type=field.type,
+                    nullable=field.nullable,
+                    description=(field_docs.get(field.name) or {}).get("description"),
+                    example=(field_docs.get(field.name) or {}).get("example"),
+                )
+                for field in live_schema.fields
+            ],
+            version=live_schema.version,
+            row_count=live_schema.row_count,
+            num_fields=live_schema.num_fields,
         )
-        
+
         # Get preview from cached data (ensure JSON-serializable for response)
-        preview_data = _make_json_serializable(table_catalogue.get('preview', []))
+        runtime_hints = table_catalogue.get("runtime_hints", {})
+        preview_data = _make_json_serializable(
+            runtime_hints.get("preview")
+            or runtime_hints.get("preview_rows")
+            or []
+        )
         
         # Get certification status
         cert_status = await get_certification_status("silver", table_name, session)
         
-        raw_sources = table_catalogue.get("sources") or []
+        business_metadata = table_catalogue.get("business_metadata", {})
+        raw_sources = business_metadata.get("sources") or []
+        schema_cache = table_catalogue.get("schema_cache", {})
         sources = [
             SourceInfo(
                 # Accept both YAML convention (name) and Postgres DBT convention (source_key)
@@ -446,20 +471,22 @@ async def get_silver_table_detail(
         return SilverTableDetail(
             name=table_name,
             description_fr=(
-                table_catalogue.get("description")
+                business_metadata.get("description")
                 or "Description non disponible"
             ),
-            dependencies=table_catalogue.get("upstream_models") or [],
-            tags=table_catalogue.get("tags") or [],
-            upstream_models=table_catalogue.get("upstream_models") or [],
-            category=table_catalogue.get("category"),
-            annee_reference=table_catalogue.get("annee_reference"),
+            dependencies=business_metadata.get("upstream_models") or [],
+            tags=business_metadata.get("tags") or [],
+            upstream_models=business_metadata.get("upstream_models") or [],
+            category=business_metadata.get("category"),
+            annee_reference=business_metadata.get("annee_reference"),
             sources=sources,
             table_schema=table_schema,
             preview=preview_data,
             certified=cert_status is not None and cert_status.get("certified", False),
             certified_at=cert_status.get("certified_at") if cert_status else None,
-            certified_by=cert_status.get("certified_by") if cert_status else None
+            certified_by=cert_status.get("certified_by") if cert_status else None,
+            schema_drift=bool(schema_cache.get("schema_drift")) if schema_cache.get("schema_drift") is not None else None,
+            drift_details=schema_cache.get("drift_details"),
         )
     
     except HTTPException:
@@ -517,7 +544,8 @@ async def get_table_metadata(
             row_count=schema_info["row_count"],
             num_fields=int(schema_info["num_fields"]),
         )
-    
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching table metadata: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch table metadata: {str(e)}")
@@ -555,16 +583,21 @@ async def preview_table(
     # Silver: serve the 10-row cached preview from PostgreSQL — fast and no S3 reads.
     # Filters and sort are ignored for the cached version (same 10 rows used in the catalogue modal).
     if layer == "silver":
-        catalogue = await load_catalogue_from_db(session)
-        table_doc = catalogue.get("tables", {}).get(table, {})
-        cached = _make_json_serializable(table_doc.get("preview", []))
+        table_doc = await catalogue_repo.get_table_row(session, table) or {}
+        schema_cache = table_doc.get("schema_cache", {})
+        runtime_hints = table_doc.get("runtime_hints", {})
+        cached = _make_json_serializable(
+            runtime_hints.get("preview")
+            or runtime_hints.get("preview_rows")
+            or []
+        )
         if cached:
             sliced = cached[: preview_req.limit]
             columns = list(sliced[0].keys()) if sliced else []
             return PreviewResponse(
                 columns=columns,
                 data=sliced,
-                total_rows=table_doc.get("row_count") or len(cached),
+                total_rows=schema_cache.get("row_count") or len(cached),
                 filtered_rows=len(sliced),
                 preview_rows=len(sliced),
             )
@@ -660,8 +693,8 @@ async def execute_sql_query(
     settings = get_settings()
     executor = get_sql_executor()
     try:
-        catalogue = await load_catalogue_from_db(session)
-        all_silver_names = list(catalogue.get("tables", {}).keys())
+        rows = await load_silver_catalog_rows(session)
+        all_silver_names = [table_name for table_name, _ in rows]
         try:
             referenced_tables = _extract_table_names(query_req.sql, all_silver_names)
         except Exception as exc:
@@ -814,18 +847,18 @@ async def refresh_catalogue(
     try:
         from datetime import datetime, timezone
 
-        existing_doc = await catalogue_repo.get(session)
+        existing_doc = await catalogue_repo.get_meta_row(session)
         if not existing_doc:
             raise HTTPException(
                 status_code=404,
-                detail="No catalogue document found in PostgreSQL. Run the pipeline first.",
+                detail=f"No {CATALOGUE_META_ID} document found in PostgreSQL. Run the pipeline first.",
             )
 
         sync_time = datetime.now(timezone.utc)
-        existing_doc["last_synced"] = sync_time.isoformat()
-        await catalogue_repo.set(session, existing_doc)
+        existing_doc["catalog_generated_at"] = sync_time.isoformat()
+        await catalogue_repo.upsert_meta_row(session, existing_doc)
 
-        num_tables = len(existing_doc.get("tables", {}))
+        num_tables = len(await load_silver_catalog_rows(session))
         logger.info("Catalogue refreshed: %d tables, last_synced=%s", num_tables, sync_time.isoformat())
 
         return CatalogueRefreshResponse(

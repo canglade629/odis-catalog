@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import verify_admin_secret_or_admin_key, verify_api_key_or_admin
 from app.db.session import get_db
-from app.db.repositories.catalogue import catalogue_repo
+from app.db.repositories.catalogue import catalogue_repo, CATALOGUE_META_ID
 from app.core.rate_limiter import limiter
 from app.core.api_key_manager import (
     create_api_key,
@@ -306,18 +306,18 @@ async def refresh_catalogue(
     try:
         from datetime import datetime, timezone
 
-        existing_doc = await catalogue_repo.get(session)
+        existing_doc = await catalogue_repo.get_meta_row(session)
         if not existing_doc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="No catalogue document found in PostgreSQL. Run the pipeline first.",
+                detail=f"No {CATALOGUE_META_ID} document found in PostgreSQL. Run the pipeline first.",
             )
 
         sync_time = datetime.now(timezone.utc)
-        existing_doc["last_synced"] = sync_time.isoformat()
-        await catalogue_repo.set(session, existing_doc)
+        existing_doc["catalog_generated_at"] = sync_time.isoformat()
+        await catalogue_repo.upsert_meta_row(session, existing_doc)
 
-        num_tables = len(existing_doc.get("tables", {}))
+        num_tables = len(await catalogue_repo.list_table_rows(session))
         logger.info("Catalogue refreshed: %d tables, last_synced=%s", num_tables, sync_time.isoformat())
 
         return CatalogueRefreshResponse(

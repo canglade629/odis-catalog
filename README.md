@@ -7,6 +7,33 @@ Odace backend is the API layer for the marketplace experience:
 
 The pipeline project is the source of truth for schema content and writes the `data_catalogue` document in PostgreSQL after each run.
 
+## Data Catalogue V2 Contract
+
+`data_catalogue` now uses a per-table model:
+- One row per silver table (`id = dim_commune`, `id = fact_logement_social_rpls`, ...).
+- One global meta row (`id = _catalogue_meta`).
+
+Per-table `document` keys:
+- `business_metadata`: business-level description/category/tags/sources/upstream info.
+- `field_docs`: enrichment docs only (`description`, `example`, `pii`, `unit`).
+- `runtime_hints`: runtime pointers (snapshot id, metadata location, estimates, optional preview hints).
+- `quality`: quality metadata from pipeline.
+- `schema_cache`: non-authoritative cached schema and drift info.
+- `catalog_generated_at`: generation timestamp for that row.
+
+Important semantics:
+- `field_docs` is documentation, not runtime schema truth.
+- `schema_cache.fields` is cache only and may drift.
+- Runtime columns/types/nullability must come from live DuckDB/Iceberg reads (`GET /api/data/table/{layer}/{table}`).
+
+Meta row (`_catalogue_meta`) includes:
+- `catalog_generated_at`
+- `dbt_manifest_generated_at`
+- `version`
+- `table_names`
+- `drift_report`
+- `source_file`
+
 ## Core Product Goal
 
 - Expose real schema information from PostgreSQL catalogue data.

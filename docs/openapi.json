@@ -3,7 +3,7 @@
   "info": {
     "title": "Odace Data API",
     "version": "1.0.0",
-    "description": "Marketplace data API exposing catalogue metadata from PostgreSQL and SQL/export access over Iceberg tables on Scaleway S3 via DuckDB."
+    "description": "Marketplace data API exposing catalogue metadata from PostgreSQL and SQL/export access over Iceberg tables on Scaleway S3 via DuckDB. The PostgreSQL data_catalogue table uses V2 layout: one row per table id plus _catalogue_meta. field_docs contains documentation only, while runtime schema authority comes from live DuckDB/Iceberg reads."
   },
   "servers": [
     { "url": "https://odace.services.d4g.fr" },
