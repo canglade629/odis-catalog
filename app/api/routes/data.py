@@ -719,7 +719,7 @@ async def export_table(
     current_user: AuthenticatedUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    """Stream a full certified silver table as CSV or Parquet.
+    """Stream a full silver table as CSV or Parquet via DuckDB Iceberg scan.
 
     Regular users can export any silver table with no row limit.
     Admin users can export any table.
@@ -728,48 +728,46 @@ async def export_table(
     if format not in ("csv", "parquet"):
         raise HTTPException(status_code=400, detail="format must be 'csv' or 'parquet'.")
 
-    # Certification restriction temporarily disabled — all silver tables are accessible.
-    # Admins keep unrestricted access across all layers; regular users are limited to silver.
     if not current_user.is_admin:
         await verify_table_access("silver", table, session, current_user)
 
     settings = get_settings()
     table_path = settings.get_silver_path(table)
-
-    try:
-        df = DeltaOperations.read_delta(table_path)
-    except FileNotFoundError:
+    metadata_path = find_latest_metadata(table_path)
+    if not metadata_path:
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
+
+    s3_config = {
+        "endpoint": settings.scw_object_storage_endpoint,
+        "access_key_id": settings.scw_access_key,
+        "secret_access_key": settings.scw_secret_key,
+        "region": settings.scw_region,
+    }
+
+    executor = SQLExecutor()
+    try:
+        executor.register_iceberg_view(table, metadata_path, s3_config)
+
+        if format == "parquet":
+            data = executor.export_to_parquet(table)
+            return StreamingResponse(
+                io.BytesIO(data),
+                media_type="application/octet-stream",
+                headers={"Content-Disposition": f"attachment; filename={table}.parquet"},
+            )
+
+        return StreamingResponse(
+            executor.export_to_csv_chunks(table),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={table}.csv"},
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Export failed for table %s: %s", table, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to read table: {str(e)}")
-
-    if format == "parquet":
-        buf = io.BytesIO()
-        df.to_parquet(buf, index=False)
-        buf.seek(0)
-        return StreamingResponse(
-            buf,
-            media_type="application/octet-stream",
-            headers={"Content-Disposition": f"attachment; filename={table}.parquet"},
-        )
-
-    # CSV — stream in 10 000-row chunks to keep memory flat
-    def _csv_chunks():
-        header_written = False
-        chunk_size = 10_000
-        for start in range(0, max(len(df), 1), chunk_size):
-            chunk = df.iloc[start : start + chunk_size]
-            buf = io.StringIO()
-            chunk.to_csv(buf, index=False, header=not header_written)
-            header_written = True
-            yield buf.getvalue()
-
-    return StreamingResponse(
-        _csv_chunks(),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={table}.csv"},
-    )
+        raise HTTPException(status_code=500, detail=f"Failed to export table: {str(e)}")
+    finally:
+        executor.close()
 
 
 @router.post("/catalog/refresh", response_model=CatalogueRefreshResponse)

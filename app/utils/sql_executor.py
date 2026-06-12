@@ -1,4 +1,5 @@
 """SQL execution using DuckDB with Delta and Iceberg support."""
+import io
 import duckdb
 import pandas as pd
 from typing import Optional, Dict, Any
@@ -152,6 +153,24 @@ class SQLExecutor:
         # For now, return source - the actual merge logic will be in pipeline classes
         return source_df
     
+    def export_to_parquet(self, table_name: str) -> bytes:
+        """Export a registered table/view as Parquet bytes."""
+        df = self.conn.execute(f"SELECT * FROM {table_name}").fetchdf()
+        buf = io.BytesIO()
+        df.to_parquet(buf, index=False)
+        return buf.getvalue()
+
+    def export_to_csv_chunks(self, table_name: str, chunk_size: int = 10_000):
+        """Yield CSV string chunks for a registered table/view."""
+        df = self.conn.execute(f"SELECT * FROM {table_name}").fetchdf()
+        header_written = False
+        for start in range(0, max(len(df), 1), chunk_size):
+            chunk = df.iloc[start:start + chunk_size]
+            sbuf = io.StringIO()
+            chunk.to_csv(sbuf, index=False, header=not header_written)
+            header_written = True
+            yield sbuf.getvalue()
+
     def close(self):
         """Close the DuckDB connection."""
         self.conn.close()
