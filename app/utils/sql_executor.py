@@ -1,28 +1,24 @@
-"""SQL execution using DuckDB with Delta and Iceberg support."""
+"""SQL execution utilities backed by DuckDB + Iceberg."""
 import io
+import logging
+import threading
+from typing import Dict
+
 import duckdb
 import pandas as pd
-from typing import Optional, Dict, Any
-import logging
-from app.utils.delta_ops import DeltaOperations
 
 logger = logging.getLogger(__name__)
 
 
 class SQLExecutor:
-    """Execute SQL queries using DuckDB with Delta and Iceberg support."""
-    
+    """Execute SQL queries using a shared DuckDB in-memory connection."""
+
     def __init__(self):
-        """Initialize DuckDB connection."""
+        """Initialize DuckDB connection and required extensions."""
         self.conn = duckdb.connect(":memory:")
+        self._lock = threading.RLock()
         self._iceberg_ready = False
-        # Install and load delta extension
-        try:
-            self.conn.execute("INSTALL delta")
-            self.conn.execute("LOAD delta")
-            logger.info("DuckDB Delta extension loaded")
-        except Exception as e:
-            logger.warning(f"Could not load Delta extension: {e}")
+        self._s3_initialized = False
 
     @staticmethod
     def _quote_literal(value: str) -> str:
@@ -39,130 +35,74 @@ class SQLExecutor:
         self.conn.execute("LOAD iceberg")
         self._iceberg_ready = True
 
-    def register_iceberg_view(self, table_name: str, metadata_path: str, s3_config: Dict[str, str]) -> None:
-        """Register an Iceberg table lazily as a DuckDB view."""
-        try:
-            self._ensure_iceberg_extensions()
-            # DuckDB httpfs prepends https:// itself, so strip any scheme from the endpoint
-            endpoint = s3_config["endpoint"]
-            for scheme in ("https://", "http://"):
-                if endpoint.startswith(scheme):
-                    endpoint = endpoint[len(scheme):]
-                    break
-            self.conn.execute(
-                "SET s3_endpoint = ?",
-                [endpoint],
-            )
-            self.conn.execute(
-                "SET s3_access_key_id = ?",
-                [s3_config["access_key_id"]],
-            )
-            self.conn.execute(
-                "SET s3_secret_access_key = ?",
-                [s3_config["secret_access_key"]],
-            )
-            self.conn.execute(
-                "SET s3_region = ?",
-                [s3_config["region"]],
-            )
-            self.conn.execute("SET s3_url_style='path'")
+    def _configure_s3(self, s3_config: Dict[str, str]) -> None:
+        """Configure DuckDB S3 access once for the process."""
+        if self._s3_initialized:
+            return
+        endpoint = s3_config["endpoint"]
+        for scheme in ("https://", "http://"):
+            if endpoint.startswith(scheme):
+                endpoint = endpoint[len(scheme):]
+                break
+        self.conn.execute("SET s3_endpoint = ?", [endpoint])
+        self.conn.execute("SET s3_access_key_id = ?", [s3_config["access_key_id"]])
+        self.conn.execute("SET s3_secret_access_key = ?", [s3_config["secret_access_key"]])
+        self.conn.execute("SET s3_region = ?", [s3_config["region"]])
+        self.conn.execute("SET s3_url_style='path'")
+        self._s3_initialized = True
 
-            # Avoid collision if view already exists in this executor.
+    def register_iceberg_view(self, table_name: str, metadata_path: str, s3_config: Dict[str, str]) -> None:
+        """Register an Iceberg table as a DuckDB view."""
+        with self._lock:
+            self._ensure_iceberg_extensions()
+            self._configure_s3(s3_config)
             self.conn.execute(f"DROP VIEW IF EXISTS {table_name}")
             safe_metadata_path = self._quote_literal(metadata_path)
             self.conn.execute(
                 f"CREATE VIEW {table_name} AS SELECT * FROM iceberg_scan('{safe_metadata_path}')",
             )
             logger.info("Registered Iceberg view %s from %s", table_name, metadata_path)
-        except Exception as e:
-            logger.error("Failed to register Iceberg view %s: %s", table_name, e)
-            raise
-    
-    def register_delta_table(self, table_name: str, delta_path: str) -> None:
-        """
-        Register a Delta table for SQL queries.
-        
-        Args:
-            table_name: Name to use in SQL queries
-            delta_path: Path to table (s3://...)
-        """
-        try:
-            # Read Delta table as pandas DataFrame
-            df = DeltaOperations.read_delta(delta_path)
-            # Register as DuckDB table
-            self.conn.register(table_name, df)
-            logger.info(f"Registered Delta table {table_name} from {delta_path}")
-        except Exception as e:
-            logger.error(f"Failed to register table {table_name}: {e}")
-            raise
-    
+
     def execute_query(self, query: str) -> pd.DataFrame:
-        """
-        Execute a SQL query and return results.
-        
-        Args:
-            query: SQL query to execute
-            
-        Returns:
-            Query results as pandas DataFrame
-        """
-        logger.info(f"Executing SQL query")
-        logger.debug(f"Query: {query}")
-        
-        result = self.conn.execute(query).fetchdf()
-        logger.info(f"Query returned {len(result)} rows")
-        return result
-    
-    def execute_merge(
-        self,
-        target_table: str,
-        source_table: str,
-        merge_condition: str,
-        update_set: Dict[str, str],
-        insert_columns: list,
-        insert_values: list
-    ) -> pd.DataFrame:
-        """
-        Execute a MERGE statement (simulated in DuckDB).
-        
-        Since DuckDB doesn't support MERGE directly, we simulate it with INSERT/UPDATE logic.
-        
-        Args:
-            target_table: Target table name
-            source_table: Source table name
-            merge_condition: Join condition
-            update_set: Dictionary of column -> expression for updates
-            insert_columns: List of columns for insert
-            insert_values: List of values/expressions for insert
-            
-        Returns:
-            Merged DataFrame
-        """
-        # This is a simplified approach - for complex merges, 
-        # we'll handle the logic in Python/pandas
-        
-        # Get source and target
-        source_df = self.conn.execute(f"SELECT * FROM {source_table}").fetchdf()
-        
-        try:
-            target_df = self.conn.execute(f"SELECT * FROM {target_table}").fetchdf()
-        except:
-            # Target doesn't exist, just return source
-            return source_df
-        
-        # For now, return source - the actual merge logic will be in pipeline classes
-        return source_df
-    
+        """Execute a SQL query and return results as DataFrame."""
+        with self._lock:
+            logger.debug("Executing query: %s", query)
+            result = self.conn.execute(query).fetchdf()
+            logger.info("Query returned %d rows", len(result))
+            return result
+
+    def get_table_schema(self, table_name: str) -> Dict[str, object]:
+        """Return table schema metadata from a registered view."""
+        with self._lock:
+            describe_df = self.conn.execute(f"DESCRIBE SELECT * FROM {table_name}").fetchdf()
+            fields = [
+                {
+                    "name": row["column_name"],
+                    "type": str(row["column_type"]),
+                    "nullable": str(row.get("null", "YES")).upper() != "NO",
+                }
+                for _, row in describe_df.iterrows()
+            ]
+            row_count = int(self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
+            return {
+                "fields": fields,
+                "version": 0,
+                "row_count": row_count,
+                "num_fields": len(fields),
+            }
+
     def export_to_parquet(self, table_name: str) -> bytes:
         """Export a registered table/view as Parquet bytes."""
-        df = self.conn.execute(f"SELECT * FROM {table_name}").fetchdf()
+        with self._lock:
+            df = self.conn.execute(f"SELECT * FROM {table_name}").fetchdf()
         buf = io.BytesIO()
         df.to_parquet(buf, index=False)
         return buf.getvalue()
 
     def export_to_csv_chunks(self, table_name: str, chunk_size: int = 10_000):
         """Yield CSV string chunks for a registered table/view."""
-        df = self.conn.execute(f"SELECT * FROM {table_name}").fetchdf()
+        with self._lock:
+            df = self.conn.execute(f"SELECT * FROM {table_name}").fetchdf()
         header_written = False
         for start in range(0, max(len(df), 1), chunk_size):
             chunk = df.iloc[start:start + chunk_size]
@@ -171,12 +111,21 @@ class SQLExecutor:
             header_written = True
             yield sbuf.getvalue()
 
-    def close(self):
-        """Close the DuckDB connection."""
-        self.conn.close()
+_executor_instance: SQLExecutor | None = None
+_executor_lock = threading.Lock()
+
+
+def initialize_sql_executor() -> SQLExecutor:
+    """Initialize the singleton SQL executor during application startup."""
+    return get_sql_executor()
 
 
 def get_sql_executor() -> SQLExecutor:
-    """Get a new SQL executor instance."""
-    return SQLExecutor()
+    """Get the shared SQL executor singleton."""
+    global _executor_instance
+    if _executor_instance is None:
+        with _executor_lock:
+            if _executor_instance is None:
+                _executor_instance = SQLExecutor()
+    return _executor_instance
 

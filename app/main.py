@@ -15,6 +15,7 @@ from app.core.config import get_settings
 from app.core.models import HealthResponse
 from app.core.rate_limiter import limiter
 from app.api.routes import data, admin, docs
+from app.utils.sql_executor import initialize_sql_executor
 
 # Configure logging
 logging.basicConfig(
@@ -98,6 +99,12 @@ async def startup_event():
         logger.info("Database (PostgreSQL) initialized")
     except Exception as e:
         logger.warning("Database init skipped or failed: %s", e)
+
+    try:
+        initialize_sql_executor()
+        logger.info("SQL executor initialized")
+    except Exception as e:
+        logger.warning("SQL executor init failed: %s", e)
     
     logger.info("Startup completed")
 

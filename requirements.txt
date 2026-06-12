@@ -19,3 +19,4 @@ slowapi==0.1.9
 PyYAML==6.0.1
 dbt-core>=1.7.0,<3
 dbt-duckdb>=1.4.0
+sqlglot>=25.0.0

@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     
     # Application settings
     log_level: str = "INFO"
+    metadata_cache_ttl_seconds: int = 300
     
     # SIAE API Configuration
     siae_api_base_url: str = "https://emplois.inclusion.beta.gouv.fr/api/v1"

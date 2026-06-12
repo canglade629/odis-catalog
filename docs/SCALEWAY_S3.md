@@ -1,38 +1,30 @@
-# Scaleway S3 (Object Storage)
+# Scaleway S3 Storage Layout
 
-The Odace app uses **Scaleway Object Storage** (S3-compatible API) as the primary storage for raw data, bronze (Delta), silver (Parquet), and gold layers.
+Odace uses Scaleway Object Storage (S3-compatible) for Iceberg tables.
 
-## Configuration
+## Required Environment Variables
 
-Set these environment variables (or use `env.template`):
+- `SCW_OBJECT_STORAGE_ENDPOINT` (example: `https://s3.fr-par.scw.cloud`)
+- `SCW_REGION` (example: `fr-par`)
+- `SCW_BUCKET_NAME`
+- `SCW_ACCESS_KEY`
+- `SCW_SECRET_KEY`
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `SCW_OBJECT_STORAGE_ENDPOINT` | S3 API endpoint | `https://s3.fr-par.scw.cloud` |
-| `SCW_REGION` | Region | `fr-par` |
-| `SCW_BUCKET_NAME` | Bucket name | `odis-s3` |
-| `SCW_ACCESS_KEY` | Access key (Scaleway console) | your key |
-| `SCW_SECRET_KEY` | Secret key | your secret |
+## Bucket Prefixes
 
-## Bucket layout
+- `raw/`: source files
+- `bronze/`: bronze Iceberg tables (`{table}.iceberg/metadata/*.metadata.json`)
+- `silver/`: silver Iceberg tables (`{table}.iceberg/metadata/*.metadata.json`)
+- `gold/`: gold datasets
 
-The app expects the following prefix layout inside the bucket:
+## How the API uses S3
 
-- **`raw/`** – Raw ingested files (CSV, JSON, XLSX, etc.) per domain, e.g. `raw/geo/`, `raw/accueillants/`.
-- **`bronze/`** – Delta Lake tables produced by bronze pipelines, e.g. `bronze/geo/`, `bronze/accueillants/`.
-- **`silver/`** – Silver layer tables as single Parquet files, e.g. `silver/dim_commune.parquet`.
-- **`gold/`** – Gold layer (aggregations).
+- `app/utils/s3_ops.py`: S3 listing/download/upload operations.
+- `app/utils/iceberg_ops.py`: resolves latest Iceberg metadata file with TTL cache.
+- `app/utils/sql_executor.py`: DuckDB `iceberg_scan(...)` execution and exports.
 
-Bronze checkpoint data is stored under `bronze/checkpoints/`.
+## Notes
 
-## How the app uses S3
-
-- **`app/utils/s3_ops.py`** – `S3Operations`: list objects, download/upload files, path-style addressing for Scaleway.
-- **`app/utils/delta_ops.py`** – `DeltaOperations`: read/write Delta tables and Parquet files on S3 using the same credentials; uses `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL`, `AWS_REGION` for the deltalake library.
-- **Pipelines** – Bronze pipelines read from `raw/` and write Delta to `bronze/`; silver/gold may be produced by DBT or other jobs and written to `silver/` and `gold/`.
-- **Data API** – Catalog and preview endpoints list and read from these S3 paths (via `delta_ops` and `s3_ops`).
-
-## References
-
-- [Scaleway Object Storage](https://www.scaleway.com/en/docs/storage/object/)
-- [S3-compatible API](https://www.scaleway.com/en/docs/storage/object/api-cli/object-storage-api/)
+- Query and export endpoints do not copy data to PostgreSQL.
+- PostgreSQL stores only metadata and access-control information.
+- Silver catalogue descriptions and previews are served from `data_catalogue` in PostgreSQL.

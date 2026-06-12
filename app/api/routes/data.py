@@ -1,11 +1,9 @@
 """Data catalog API routes."""
 import io
 import logging
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from decimal import Decimal
-from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -13,13 +11,15 @@ from typing import AsyncIterator, List, Optional, Dict, Any
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 import numpy as np
+import pandas as pd
+import sqlglot
 
 from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin, get_current_user, AuthenticatedUser
 from app.db.session import get_db
 from app.db.repositories.catalogue import catalogue_repo
 from app.core.config import get_settings
-from app.utils.delta_ops import DeltaOperations, find_latest_metadata
-from app.utils.sql_executor import SQLExecutor
+from app.utils.iceberg_ops import find_latest_metadata
+from app.utils.sql_executor import get_sql_executor
 from app.core.rate_limiter import limiter
 from app.core.certification_manager import get_certification_status
 
@@ -59,31 +59,28 @@ def _is_select_query(sql: str) -> bool:
 
 
 def _extract_table_names(sql: str, known_tables: List[str]) -> List[str]:
-    """Extract referenced table names by intersecting SQL tokens with known table names."""
-    tokens = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", sql.lower()))
+    """Extract referenced table names by parsing SQL with sqlglot."""
     lower_to_actual = {name.lower(): name for name in known_tables}
-    matched = [lower_to_actual[token] for token in tokens if token in lower_to_actual]
-    return sorted(set(matched))
+    parsed = sqlglot.parse_one(sql, read="duckdb")
+    referenced = set()
+    for table in parsed.find_all(sqlglot.exp.Table):
+        table_name = table.name.lower()
+        if table_name in lower_to_actual:
+            referenced.add(lower_to_actual[table_name])
+    return sorted(referenced)
 
 
-def _load_certified_silver_tables(executor: SQLExecutor, certified_names: list, settings: Any) -> None:
-    """Register certified silver Delta tables into a DuckDB executor instance."""
-    for name in certified_names:
-        try:
-            executor.register_delta_table(name, settings.get_silver_path(name))
-        except Exception as e:
-            logger.warning("Could not register silver table %s for query: %s", name, e)
+def _build_s3_config(settings: Any) -> Dict[str, str]:
+    return {
+        "endpoint": settings.scw_object_storage_endpoint,
+        "access_key_id": settings.scw_access_key,
+        "secret_access_key": settings.scw_secret_key,
+        "region": settings.scw_region,
+    }
 
 
-def _load_all_tables(executor: SQLExecutor, catalogue: Dict[str, Any], settings: Any) -> None:
-    """Register all catalogue tables (all layers) into a DuckDB executor instance."""
-    for name in catalogue.get("tables", {}):
-        for get_path in (settings.get_silver_path, settings.get_bronze_path, settings.get_gold_path):
-            try:
-                executor.register_delta_table(name, get_path(name))
-                break
-            except Exception:
-                continue
+def _sanitize_preview_df(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    return _make_json_serializable(df.to_dict(orient="records"))
 
 
 async def verify_table_access(
@@ -489,6 +486,7 @@ async def get_table_metadata(
     """
     logger.info(f"Fetching metadata for {layer}.{table}")
     settings = get_settings()
+    executor = get_sql_executor()
     
     # Validate layer
     if layer not in ["bronze", "silver", "gold"]:
@@ -503,20 +501,21 @@ async def get_table_metadata(
         table_path = settings.get_gold_path(table)
     
     try:
-        schema_info = DeltaOperations.get_table_schema(table_path)
-        
+        metadata_path = find_latest_metadata(table_path)
+        if not metadata_path:
+            raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
+
+        executor.register_iceberg_view(
+            table_name=table,
+            metadata_path=metadata_path,
+            s3_config=_build_s3_config(settings),
+        )
+        schema_info = executor.get_table_schema(table)
         return TableSchema(
-            fields=[
-                SchemaField(
-                    name=field["name"],
-                    type=field["type"],
-                    nullable=field["nullable"]
-                )
-                for field in schema_info["fields"]
-            ],
-            version=schema_info["version"],
+            fields=[SchemaField(name=field["name"], type=field["type"], nullable=field["nullable"]) for field in schema_info["fields"]],
+            version=int(schema_info["version"]),
             row_count=schema_info["row_count"],
-            num_fields=schema_info["num_fields"]
+            num_fields=int(schema_info["num_fields"]),
         )
     
     except Exception as e:
@@ -544,6 +543,7 @@ async def preview_table(
     """
     logger.info(f"Previewing {layer}.{table} with filters={preview_req.filters}, sort={preview_req.sort_by}")
     settings = get_settings()
+    executor = get_sql_executor()
     
     # Validate layer
     if layer not in ["bronze", "silver", "gold"]:
@@ -579,25 +579,55 @@ async def preview_table(
         table_path = settings.get_gold_path(table)
     
     try:
-        # Convert Pydantic models to dicts
-        filters_dict = None
-        if preview_req.filters:
-            filters_dict = [f.dict() for f in preview_req.filters]
-        
-        preview_data = DeltaOperations.preview_table(
-            table_path=table_path,
-            limit=preview_req.limit,
-            filters=filters_dict,
-            sort_by=preview_req.sort_by,
-            sort_order=preview_req.sort_order
+        metadata_path = find_latest_metadata(table_path)
+        if not metadata_path:
+            raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
+
+        executor.register_iceberg_view(
+            table_name=table,
+            metadata_path=metadata_path,
+            s3_config=_build_s3_config(settings),
         )
-        
+
+        total_rows = int(executor.execute_query(f"SELECT COUNT(*) AS c FROM {table}").iloc[0]["c"])
+        scan_limit = max(preview_req.limit * 10, preview_req.limit)
+        df = executor.execute_query(f"SELECT * FROM {table} LIMIT {scan_limit}")
+
+        if preview_req.filters:
+            for spec in preview_req.filters:
+                col = spec.column
+                op = spec.operator
+                val = spec.value
+                if col in df.columns:
+                    try:
+                        if op == "=":
+                            df = df[df[col] == val]
+                        elif op == "!=":
+                            df = df[df[col] != val]
+                        elif op == "contains":
+                            df = df[df[col].astype(str).str.contains(str(val), case=False, na=False)]
+                        elif op == ">":
+                            df = df[df[col] > float(val)]
+                        elif op == "<":
+                            df = df[df[col] < float(val)]
+                        elif op == ">=":
+                            df = df[df[col] >= float(val)]
+                        elif op == "<=":
+                            df = df[df[col] <= float(val)]
+                    except Exception as exc:
+                        logger.warning("Filter failed for %s %s %s: %s", col, op, val, exc)
+
+        filtered_rows = len(df)
+        if preview_req.sort_by and preview_req.sort_by in df.columns:
+            df = df.sort_values(by=preview_req.sort_by, ascending=(preview_req.sort_order.lower() == "asc"))
+        preview_df = df.head(preview_req.limit)
+
         return PreviewResponse(
-            columns=preview_data["columns"],
-            data=preview_data["data"],
-            total_rows=preview_data["total_rows"],
-            filtered_rows=preview_data["filtered_rows"],
-            preview_rows=preview_data["preview_rows"]
+            columns=list(preview_df.columns),
+            data=_sanitize_preview_df(preview_df),
+            total_rows=total_rows,
+            filtered_rows=filtered_rows,
+            preview_rows=len(preview_df),
         )
     
     except Exception as e:
@@ -628,11 +658,14 @@ async def execute_sql_query(
         )
 
     settings = get_settings()
-    executor = SQLExecutor()
+    executor = get_sql_executor()
     try:
         catalogue = await load_catalogue_from_db(session)
         all_silver_names = list(catalogue.get("tables", {}).keys())
-        referenced_tables = _extract_table_names(query_req.sql, all_silver_names)
+        try:
+            referenced_tables = _extract_table_names(query_req.sql, all_silver_names)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid SQL query: {exc}") from exc
 
         if len(referenced_tables) > MAX_TABLES_PER_QUERY:
             raise HTTPException(
@@ -651,12 +684,7 @@ async def execute_sql_query(
                     detail=f"Only silver tables are allowed for non-admin users: {', '.join(disallowed)}",
                 )
 
-        s3_config = {
-            "endpoint": settings.scw_object_storage_endpoint,
-            "access_key_id": settings.scw_access_key,
-            "secret_access_key": settings.scw_secret_key,
-            "region": settings.scw_region,
-        }
+        s3_config = _build_s3_config(settings)
 
         for table_name in referenced_tables:
             table_path = settings.get_silver_path(table_name)
@@ -692,6 +720,13 @@ async def execute_sql_query(
         result_df = result_df.head(limit)
 
         records = _make_json_serializable(result_df.to_dict(orient="records"))
+        from app.utils.query_tracker import increment_query_count
+        for table_name in referenced_tables:
+            await increment_query_count(
+                session=session,
+                table_name=f"silver_{table_name}",
+                user_id=current_user.user_id,
+            )
         return QueryResponse(
             columns=list(result_df.columns),
             data=records,
@@ -706,8 +741,6 @@ async def execute_sql_query(
     except Exception as e:
         logger.error("SQL query execution failed: %s", e, exc_info=True)
         raise HTTPException(status_code=400, detail=f"Query failed: {str(e)}")
-    finally:
-        executor.close()
 
 
 @router.get("/export/{table}", tags=["data"])
@@ -737,14 +770,8 @@ async def export_table(
     if not metadata_path:
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
 
-    s3_config = {
-        "endpoint": settings.scw_object_storage_endpoint,
-        "access_key_id": settings.scw_access_key,
-        "secret_access_key": settings.scw_secret_key,
-        "region": settings.scw_region,
-    }
-
-    executor = SQLExecutor()
+    s3_config = _build_s3_config(settings)
+    executor = get_sql_executor()
     try:
         executor.register_iceberg_view(table, metadata_path, s3_config)
 
@@ -766,8 +793,6 @@ async def export_table(
     except Exception as e:
         logger.error("Export failed for table %s: %s", table, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to export table: {str(e)}")
-    finally:
-        executor.close()
 
 
 @router.post("/catalog/refresh", response_model=CatalogueRefreshResponse)
