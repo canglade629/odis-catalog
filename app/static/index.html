@@ -1793,13 +1793,22 @@
             
             // Preview section
             let previewHtml = '';
-            if (tableData.preview && tableData.preview.length > 0) {
-                // Use schema field order for consistency
-                const columns = tableData.schema.fields.map(field => field.name);
-                
+            // Use schema field order for consistency
+            const columns = tableData.schema.fields.map(field => field.name);
+            const hasPreviewRows = tableData.preview && tableData.preview.length > 0;
+            const hasFieldExamples = tableData.schema.fields.some(field => field.example !== null && field.example !== undefined && String(field.example) !== '');
+
+            if (hasPreviewRows || hasFieldExamples) {
+                const previewRows = hasPreviewRows
+                    ? tableData.preview
+                    : [Object.fromEntries(tableData.schema.fields.map(field => [field.name, field.example ?? null]))];
+                const previewTitle = hasPreviewRows
+                    ? 'Aperçu des Données (10 premières lignes)'
+                    : 'Aperçu des Données (exemples par colonne)';
+
                 previewHtml = `
                     <div class="modal-section">
-                        <h4>Aperçu des Données (10 premières lignes)</h4>
+                        <h4>${previewTitle}</h4>
                         <div class="preview-table-wrapper">
                             <table class="preview-table">
                                 <thead>
@@ -1808,11 +1817,11 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${tableData.preview.map(row => `
+                                    ${previewRows.map(row => `
                                         <tr>
                                             ${columns.map(col => {
                                                 const value = row[col];
-                                                const displayValue = value !== null && value !== undefined ? value : '<i>null</i>';
+                                                const displayValue = value !== null && value !== undefined && value !== '' ? value : '<i>null</i>';
                                                 return `<td>${displayValue}</td>`;
                                             }).join('')}
                                         </tr>
