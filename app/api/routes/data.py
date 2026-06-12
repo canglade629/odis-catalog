@@ -83,6 +83,16 @@ def _sanitize_preview_df(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return _make_json_serializable(df.to_dict(orient="records"))
 
 
+def _as_dict_or_none(value: Any) -> Optional[Dict[str, Any]]:
+    """Return dict payloads as-is; coerce other JSON types to None."""
+    return value if isinstance(value, dict) else None
+
+
+def _as_list(value: Any) -> List[Any]:
+    """Return list payloads as-is; coerce other JSON types to an empty list."""
+    return value if isinstance(value, list) else []
+
+
 async def verify_table_access(
     layer: str,
     table_name: str,
@@ -348,12 +358,15 @@ async def get_silver_catalog(
 
         tables = []
         for table_name, catalogue_info in sorted(rows, key=lambda row: row[0]):
-            business_metadata = catalogue_info.get("business_metadata", {})
-            schema_cache = catalogue_info.get("schema_cache", {})
+            business_metadata = _as_dict_or_none(catalogue_info.get("business_metadata")) or {}
+            schema_cache = _as_dict_or_none(catalogue_info.get("schema_cache")) or {}
             row_count = schema_cache.get("row_count")
             version = schema_cache.get("version", 0)
             schema_drift_raw = schema_cache.get("schema_drift")
             schema_drift = bool(schema_drift_raw) if schema_drift_raw is not None else None
+            drift_details = _as_dict_or_none(schema_cache.get("drift_details"))
+            if schema_cache.get("drift_details") is not None and drift_details is None:
+                logger.warning("Ignoring non-dict drift_details for table '%s'", table_name)
 
             # Get certification status from PostgreSQL (fast)
             cert_status = await get_certification_status("silver", table_name, session)
@@ -368,7 +381,7 @@ async def get_silver_catalog(
                     business_metadata.get("description")
                     or "Description non disponible"
                 ),
-                dependencies=business_metadata.get("upstream_models") or [],
+                dependencies=_as_list(business_metadata.get("upstream_models")),
                 version=version,
                 row_count=row_count,
                 category=business_metadata.get("category"),
@@ -378,7 +391,7 @@ async def get_silver_catalog(
                 certified_by=cert_status.get("certified_by") if cert_status else None,
                 query_count=query_count,
                 schema_drift=schema_drift,
-                drift_details=schema_cache.get("drift_details"),
+                drift_details=drift_details,
             ))
 
         last_synced = (
@@ -386,10 +399,13 @@ async def get_silver_catalog(
             or meta.get("dbt_manifest_generated_at")
             or (rows[0][1].get("catalog_generated_at") if rows else None)
         )
+        drift_report = _as_dict_or_none(meta.get("drift_report"))
+        if meta.get("drift_report") is not None and drift_report is None:
+            logger.warning("Ignoring non-dict drift_report from _catalogue_meta")
         return SilverCatalogResponse(
             tables=tables,
             last_synced=last_synced,
-            drift_report=meta.get("drift_report"),
+            drift_report=drift_report,
         )
     
     except Exception as e:
@@ -424,7 +440,7 @@ async def get_silver_table_detail(
 
         # Runtime schema is authoritative and comes from live DuckDB/Iceberg.
         live_schema = await get_table_metadata(request, "silver", table_name, user_id)
-        field_docs = table_catalogue.get("field_docs", {})
+        field_docs = _as_dict_or_none(table_catalogue.get("field_docs")) or {}
         table_schema = TableSchema(
             fields=[
                 SchemaField(
@@ -452,9 +468,12 @@ async def get_silver_table_detail(
         # Get certification status
         cert_status = await get_certification_status("silver", table_name, session)
         
-        business_metadata = table_catalogue.get("business_metadata", {})
-        raw_sources = business_metadata.get("sources") or []
-        schema_cache = table_catalogue.get("schema_cache", {})
+        business_metadata = _as_dict_or_none(table_catalogue.get("business_metadata")) or {}
+        raw_sources = _as_list(business_metadata.get("sources"))
+        schema_cache = _as_dict_or_none(table_catalogue.get("schema_cache")) or {}
+        drift_details = _as_dict_or_none(schema_cache.get("drift_details"))
+        if schema_cache.get("drift_details") is not None and drift_details is None:
+            logger.warning("Ignoring non-dict drift_details for table detail '%s'", table_name)
         sources = [
             SourceInfo(
                 # Accept both YAML convention (name) and Postgres DBT convention (source_key)
@@ -474,9 +493,9 @@ async def get_silver_table_detail(
                 business_metadata.get("description")
                 or "Description non disponible"
             ),
-            dependencies=business_metadata.get("upstream_models") or [],
-            tags=business_metadata.get("tags") or [],
-            upstream_models=business_metadata.get("upstream_models") or [],
+            dependencies=_as_list(business_metadata.get("upstream_models")),
+            tags=_as_list(business_metadata.get("tags")),
+            upstream_models=_as_list(business_metadata.get("upstream_models")),
             category=business_metadata.get("category"),
             annee_reference=business_metadata.get("annee_reference"),
             sources=sources,
@@ -486,7 +505,7 @@ async def get_silver_table_detail(
             certified_at=cert_status.get("certified_at") if cert_status else None,
             certified_by=cert_status.get("certified_by") if cert_status else None,
             schema_drift=bool(schema_cache.get("schema_drift")) if schema_cache.get("schema_drift") is not None else None,
-            drift_details=schema_cache.get("drift_details"),
+            drift_details=drift_details,
         )
     
     except HTTPException:
