@@ -93,6 +93,17 @@ def _as_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _as_str_or_none(value: Any) -> Optional[str]:
+    """Coerce scalar values to string for strict response models."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool, Decimal)):
+        return str(value)
+    return None
+
+
 async def verify_table_access(
     layer: str,
     table_name: str,
@@ -447,8 +458,8 @@ async def get_silver_table_detail(
                     name=field.name,
                     type=field.type,
                     nullable=field.nullable,
-                    description=(field_docs.get(field.name) or {}).get("description"),
-                    example=(field_docs.get(field.name) or {}).get("example"),
+                    description=_as_str_or_none((field_docs.get(field.name) or {}).get("description")),
+                    example=_as_str_or_none((field_docs.get(field.name) or {}).get("example")),
                 )
                 for field in live_schema.fields
             ],
