@@ -475,6 +475,23 @@ async def get_silver_table_detail(
             or runtime_hints.get("preview_rows")
             or []
         )
+        if not preview_data:
+            # Fallback: fetch a small live preview when V2 cached preview is missing.
+            try:
+                settings = get_settings()
+                executor = get_sql_executor()
+                table_path = settings.get_silver_path(table_name)
+                metadata_path = find_latest_metadata(table_path)
+                if metadata_path:
+                    executor.register_iceberg_view(
+                        table_name=table_name,
+                        metadata_path=metadata_path,
+                        s3_config=_build_s3_config(settings),
+                    )
+                    preview_df = executor.execute_query(f"SELECT * FROM {table_name} LIMIT 10")
+                    preview_data = _sanitize_preview_df(preview_df)
+            except Exception as preview_exc:
+                logger.warning("Could not load live preview for %s: %s", table_name, preview_exc)
         
         # Get certification status
         cert_status = await get_certification_status("silver", table_name, session)
