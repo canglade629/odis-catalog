@@ -62,9 +62,9 @@ class SQLExecutor:
 
             # Avoid collision if view already exists in this executor.
             self.conn.execute(f"DROP VIEW IF EXISTS {table_name}")
+            safe_metadata_path = self._quote_literal(metadata_path)
             self.conn.execute(
-                f"CREATE VIEW {table_name} AS SELECT * FROM iceberg_scan(?)",
-                [metadata_path],
+                f"CREATE VIEW {table_name} AS SELECT * FROM iceberg_scan('{safe_metadata_path}')",
             )
             logger.info("Registered Iceberg view %s from %s", table_name, metadata_path)
         except Exception as e:
