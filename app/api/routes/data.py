@@ -449,23 +449,47 @@ async def get_silver_table_detail(
         if not table_catalogue:
             raise HTTPException(status_code=404, detail=f"Table {table_name} not found in catalogue")
 
-        # Runtime schema is authoritative and comes from live DuckDB/Iceberg.
-        live_schema = await get_table_metadata(request, "silver", table_name, user_id)
         field_docs = _as_dict_or_none(table_catalogue.get("field_docs")) or {}
-        table_schema = TableSchema(
-            fields=[
+        schema_cache = _as_dict_or_none(table_catalogue.get("schema_cache")) or {}
+        cached_fields = _as_list(schema_cache.get("fields"))
+
+        schema_fields: List[SchemaField] = []
+        for field in cached_fields:
+            if not isinstance(field, dict):
+                continue
+            field_name = field.get("name")
+            if not field_name:
+                continue
+            doc_for_field = _as_dict_or_none(field_docs.get(field_name)) or {}
+            schema_fields.append(
                 SchemaField(
-                    name=field.name,
-                    type=field.type,
-                    nullable=field.nullable,
-                    description=_as_str_or_none((field_docs.get(field.name) or {}).get("description")),
-                    example=_as_str_or_none((field_docs.get(field.name) or {}).get("example")),
+                    name=field_name,
+                    type=str(field.get("type") or "unknown"),
+                    nullable=bool(field.get("nullable", True)),
+                    description=_as_str_or_none(doc_for_field.get("description")),
+                    example=_as_str_or_none(doc_for_field.get("example")),
                 )
-                for field in live_schema.fields
-            ],
-            version=live_schema.version,
-            row_count=live_schema.row_count,
-            num_fields=live_schema.num_fields,
+            )
+
+        # Fallback when cached schema fields are missing: show documented fields only.
+        if not schema_fields:
+            for field_name, doc in field_docs.items():
+                doc_for_field = _as_dict_or_none(doc) or {}
+                schema_fields.append(
+                    SchemaField(
+                        name=field_name,
+                        type="unknown",
+                        nullable=True,
+                        description=_as_str_or_none(doc_for_field.get("description")),
+                        example=_as_str_or_none(doc_for_field.get("example")),
+                    )
+                )
+
+        table_schema = TableSchema(
+            fields=schema_fields,
+            version=int(schema_cache.get("version") or 0),
+            row_count=schema_cache.get("row_count"),
+            num_fields=int(schema_cache.get("num_fields") or len(schema_fields)),
         )
 
         # Get preview from cached data (ensure JSON-serializable for response)
@@ -475,30 +499,12 @@ async def get_silver_table_detail(
             or runtime_hints.get("preview_rows")
             or []
         )
-        if not preview_data:
-            # Fallback: fetch a small live preview when V2 cached preview is missing.
-            try:
-                settings = get_settings()
-                executor = get_sql_executor()
-                table_path = settings.get_silver_path(table_name)
-                metadata_path = find_latest_metadata(table_path)
-                if metadata_path:
-                    executor.register_iceberg_view(
-                        table_name=table_name,
-                        metadata_path=metadata_path,
-                        s3_config=_build_s3_config(settings),
-                    )
-                    preview_df = executor.execute_query(f"SELECT * FROM {table_name} LIMIT 10")
-                    preview_data = _sanitize_preview_df(preview_df)
-            except Exception as preview_exc:
-                logger.warning("Could not load live preview for %s: %s", table_name, preview_exc)
         
         # Get certification status
         cert_status = await get_certification_status("silver", table_name, session)
         
         business_metadata = _as_dict_or_none(table_catalogue.get("business_metadata")) or {}
         raw_sources = _as_list(business_metadata.get("sources"))
-        schema_cache = _as_dict_or_none(table_catalogue.get("schema_cache")) or {}
         drift_details = _as_dict_or_none(schema_cache.get("drift_details"))
         if schema_cache.get("drift_details") is not None and drift_details is None:
             logger.warning("Ignoring non-dict drift_details for table detail '%s'", table_name)
