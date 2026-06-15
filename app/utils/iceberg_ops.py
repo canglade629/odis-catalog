@@ -65,6 +65,47 @@ def find_latest_metadata(table_path: str) -> Optional[str]:
     return latest
 
 
+async def resolve_metadata_path(
+    session: Any,
+    *,
+    layer: str,
+    table_name: str,
+    table_path: str,
+) -> Optional[str]:
+    """Resolve metadata path from Postgres iceberg catalog, then fallback to S3 scan.
+
+    Preferred source is `iceberg_tables.metadata_location` because it points to the
+    current catalog snapshot. If unavailable, fallback to S3 metadata file discovery.
+    """
+    # 1) Canonical lookup from Iceberg SQL catalog in Postgres.
+    try:
+        from sqlalchemy import text
+
+        result = await session.execute(
+            text(
+                "SELECT metadata_location "
+                "FROM iceberg_tables "
+                "WHERE table_namespace = :ns AND table_name = :tbl "
+                "ORDER BY metadata_location DESC "
+                "LIMIT 1"
+            ),
+            {"ns": layer, "tbl": table_name},
+        )
+        row = result.first()
+        if row and row[0]:
+            return str(row[0])
+    except Exception as exc:
+        logger.warning(
+            "Could not resolve metadata_location from iceberg_tables for %s.%s: %s",
+            layer,
+            table_name,
+            exc,
+        )
+
+    # 2) Fallback to runtime S3 discovery.
+    return find_latest_metadata(table_path)
+
+
 def invalidate_metadata_cache(table_path: Optional[str] = None) -> None:
     """Invalidate one cached table path or the entire metadata cache."""
     with _cache_lock:

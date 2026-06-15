@@ -18,7 +18,7 @@ from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or
 from app.db.session import get_db
 from app.db.repositories.catalogue import catalogue_repo, CATALOGUE_META_ID
 from app.core.config import get_settings
-from app.utils.iceberg_ops import find_latest_metadata
+from app.utils.iceberg_ops import resolve_metadata_path
 from app.utils.sql_executor import get_sql_executor
 from app.core.rate_limiter import limiter
 from app.core.certification_manager import get_certification_status
@@ -581,10 +581,21 @@ async def get_table_metadata(
         table_path = settings.get_gold_path(table)
     
     try:
-        metadata_path = find_latest_metadata(table_path)
+        metadata_path = await resolve_metadata_path(
+            session,
+            layer=layer,
+            table_name=table,
+            table_path=table_path,
+        )
         if not metadata_path:
             raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
 
+        logger.info(
+            "Resolved metadata for %s.%s -> %s",
+            layer,
+            table,
+            metadata_path,
+        )
         executor.register_iceberg_view(
             table_name=table,
             metadata_path=metadata_path,
@@ -665,10 +676,21 @@ async def preview_table(
         table_path = settings.get_gold_path(table)
     
     try:
-        metadata_path = find_latest_metadata(table_path)
+        metadata_path = await resolve_metadata_path(
+            session,
+            layer=layer,
+            table_name=table,
+            table_path=table_path,
+        )
         if not metadata_path:
             raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
 
+        logger.info(
+            "Resolved metadata for %s.%s -> %s",
+            layer,
+            table,
+            metadata_path,
+        )
         executor.register_iceberg_view(
             table_name=table,
             metadata_path=metadata_path,
@@ -774,12 +796,23 @@ async def execute_sql_query(
 
         for table_name in referenced_tables:
             table_path = settings.get_silver_path(table_name)
-            metadata_path = find_latest_metadata(table_path)
+            metadata_path = await resolve_metadata_path(
+                session,
+                layer="silver",
+                table_name=table_name,
+                table_path=table_path,
+            )
             if not metadata_path:
                 raise HTTPException(
                     status_code=404,
                     detail=f"Could not find Iceberg metadata for table: {table_name}",
                 )
+            logger.info(
+                "Query table resolution: table=%s table_path=%s metadata_path=%s",
+                table_name,
+                table_path,
+                metadata_path,
+            )
             executor.register_iceberg_view(table_name, metadata_path, s3_config)
 
         limit = min(query_req.limit, 10_000)
@@ -852,10 +885,21 @@ async def export_table(
 
     settings = get_settings()
     table_path = settings.get_silver_path(table)
-    metadata_path = find_latest_metadata(table_path)
+    metadata_path = await resolve_metadata_path(
+        session,
+        layer="silver",
+        table_name=table,
+        table_path=table_path,
+    )
     if not metadata_path:
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
 
+    logger.info(
+        "Export table resolution: table=%s table_path=%s metadata_path=%s",
+        table,
+        table_path,
+        metadata_path,
+    )
     s3_config = _build_s3_config(settings)
     executor = get_sql_executor()
     try:
