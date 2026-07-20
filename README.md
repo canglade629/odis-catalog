@@ -90,6 +90,10 @@ This keeps PostgreSQL focused on metadata and S3 focused on analytical data.
    ```bash
    pip install -r requirements.txt
    ```
+   For local dbt/pipeline work, also install dev dependencies:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
 
 3. Apply database schema:
    ```bash
