@@ -1,5 +1,7 @@
 # ODAS API
 
+> **Archived.** ODAS is now developed in the private repository `canglade629/odas`, together with its data pipeline. This repository is read-only and kept for its history.
+
 ODAS (Open Data Accueil Solidaire) exposes the open-data catalogue and query API behind the marketplace experience. The API and the static UI (`app/static/index.html`) run as a single Cloud Run service:
 - Firestore stores catalogue metadata, certifications, API keys, query counters and daily usage.
 - BigQuery stores the tables, one dataset per layer (`odas_bronze`, `odas_silver`, `odas_gold`), and runs the SQL of the query endpoint.
