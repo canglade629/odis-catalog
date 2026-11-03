@@ -235,18 +235,18 @@ curl -fsS "$(gcloud run services describe odas-app --project=$PROJECT_ID --regio
 
 ### Git integration
 
-Cloud Build reaches GitHub through the regional connection `odas-github`, authorized by the owner of `canglade629/odis-catalog`. To recreate it:
+Cloud Build reaches GitHub through the regional connection `odas-github`, authorized by the owner of the private repository `canglade629/odas`. To recreate it:
 
 ```bash
 gcloud builds connections create github odas-github --project=$PROJECT_ID --region=$REGION
 # Open the printed link while signed in to GitHub as the repository owner, authorize Cloud Build and
-# install its GitHub App on the repository. `connections describe` then shows installationState COMPLETE.
+# install its GitHub App with access to canglade629/odas. `connections describe` then shows installationState COMPLETE.
 gcloud builds connections describe odas-github --project=$PROJECT_ID --region=$REGION
 
-gcloud builds repositories create odis-catalog --remote-uri=https://github.com/canglade629/odis-catalog.git \
+gcloud builds repositories create odas --remote-uri=https://github.com/canglade629/odas.git \
   --connection=odas-github --project=$PROJECT_ID --region=$REGION
 gcloud builds triggers create github --name=odas-app-deploy --project=$PROJECT_ID --region=$REGION \
-  --repository=projects/$PROJECT_ID/locations/$REGION/connections/odas-github/repositories/odis-catalog \
+  --repository=projects/$PROJECT_ID/locations/$REGION/connections/odas-github/repositories/odas \
   --branch-pattern='^main$' --build-config=cloudbuild.yaml \
   --service-account=projects/$PROJECT_ID/serviceAccounts/$CI_SA
 ```
