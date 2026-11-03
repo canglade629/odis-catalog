@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Odace Data API",
+    "title": "ODAS API",
     "version": "1.0.0",
-    "description": "Marketplace data API exposing catalogue metadata from PostgreSQL and SQL/export access over Iceberg tables on Scaleway S3 via DuckDB. The PostgreSQL data_catalogue table uses V2 layout: one row per table id plus _catalogue_meta. field_docs contains documentation only, while runtime schema authority comes from live DuckDB/Iceberg reads."
+    "description": "Marketplace data API exposing catalogue metadata from Firestore and SQL/export access over the BigQuery datasets odas_bronze, odas_silver and odas_gold. The Firestore data_catalogue collection uses V2 layout: one document per table id plus _catalogue_meta. field_docs contains documentation only, while runtime schema authority comes from the BigQuery table metadata."
   },
   "servers": [
     { "url": "https://odace.services.d4g.fr" },
@@ -67,6 +67,7 @@
     "/api/data/query": {
       "post": {
         "summary": "Execute SQL query",
+        "description": "Runs one BigQuery SQL (GoogleSQL) SELECT statement. Silver tables are referenced by name (dim_commune) or as odas_silver.dim_commune; admins may also read odas_bronze.<table> and odas_gold.<table>. Paginate with offset: results are cached, so the next pages are not billed again. Answers 429 once the API's daily query budget is used up.",
         "security": [{ "HTTPBearer": [] }],
         "responses": { "200": { "description": "Query result" } }
       }
@@ -91,8 +92,8 @@
     },
     "/admin/runtime-cache/invalidate": {
       "post": {
-        "summary": "Invalidate runtime Iceberg metadata cache",
-        "description": "Admin endpoint to invalidate the in-process metadata cache used by /api/data/query. Use { \"all\": true } to invalidate all cached table paths, or pass { \"layer\": \"silver\", \"table_name\": \"...\" } for targeted invalidation.",
+        "summary": "Invalidate the runtime cache",
+        "description": "Admin endpoint dropping this instance's cached BigQuery table listings and Firestore catalogue. Send { \"all\": true }, or { \"layer\": \"silver\", \"table_name\": \"...\" }; the whole cache is dropped in both cases.",
         "security": [{ "HTTPBearer": [] }],
         "responses": { "200": { "description": "Cache invalidation status" } }
       }

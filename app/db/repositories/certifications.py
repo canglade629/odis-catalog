@@ -1,93 +1,74 @@
-"""Table certifications repository (PostgreSQL)."""
+"""Table certifications repository (Firestore collection `table_certifications`, id = `<layer>_<table>`)."""
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
-from sqlalchemy import select, delete
-from sqlalchemy.ext.asyncio import AsyncSession
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
-from app.db.models import TableCertification
+COLLECTION = "table_certifications"
 
 
 def _doc_id(layer: str, table_name: str) -> str:
     return f"{layer}_{table_name}"
 
 
+def _to_status(data: Dict[str, Any]) -> Dict:
+    certified_at = data.get("certified_at")
+    return {
+        "layer": data.get("layer"),
+        "table_name": data.get("table_name"),
+        "certified": bool(data.get("certified", False)),
+        "certified_at": certified_at.isoformat() if isinstance(certified_at, datetime) else certified_at,
+        "certified_by": data.get("certified_by"),
+    }
+
+
 class CertificationRepository:
     async def set(
         self,
-        session: AsyncSession,
+        db: firestore.AsyncClient,
         layer: str,
         table_name: str,
         certified_by: str,
     ) -> None:
-        doc_id = _doc_id(layer, table_name)
-        result = await session.execute(select(TableCertification).where(TableCertification.id == doc_id))
-        row = result.scalars().first()
-        now = datetime.utcnow()
-        if row:
-            row.certified = True
-            row.certified_at = now
-            row.certified_by = certified_by
-        else:
-            session.add(
-                TableCertification(
-                    id=doc_id,
-                    layer=layer,
-                    table_name=table_name,
-                    certified=True,
-                    certified_at=now,
-                    certified_by=certified_by,
-                )
-            )
-        await session.flush()
+        await db.collection(COLLECTION).document(_doc_id(layer, table_name)).set(
+            {
+                "layer": layer,
+                "table_name": table_name,
+                "certified": True,
+                "certified_at": firestore.SERVER_TIMESTAMP,
+                "certified_by": certified_by,
+            }
+        )
 
-    async def delete(self, session: AsyncSession, layer: str, table_name: str) -> bool:
-        doc_id = _doc_id(layer, table_name)
-        result = await session.execute(delete(TableCertification).where(TableCertification.id == doc_id))
-        return (result.rowcount or 0) > 0
+    async def delete(self, db: firestore.AsyncClient, layer: str, table_name: str) -> bool:
+        ref = db.collection(COLLECTION).document(_doc_id(layer, table_name))
+        snapshot = await ref.get()
+        if not snapshot.exists:
+            return False
+        await ref.delete()
+        return True
 
     async def get(
         self,
-        session: AsyncSession,
+        db: firestore.AsyncClient,
         layer: str,
         table_name: str,
     ) -> Optional[Dict]:
-        doc_id = _doc_id(layer, table_name)
-        result = await session.execute(select(TableCertification).where(TableCertification.id == doc_id))
-        row = result.scalars().first()
-        if not row or not row.certified:
+        snapshot = await db.collection(COLLECTION).document(_doc_id(layer, table_name)).get()
+        if not snapshot.exists:
             return None
-        return {
-            "layer": row.layer,
-            "table_name": row.table_name,
-            "certified": row.certified,
-            "certified_at": row.certified_at.isoformat() if row.certified_at else None,
-            "certified_by": row.certified_by,
-        }
+        data = snapshot.to_dict() or {}
+        if not data.get("certified"):
+            return None
+        return _to_status(data)
 
-    async def is_certified(self, session: AsyncSession, layer: str, table_name: str) -> bool:
-        doc_id = _doc_id(layer, table_name)
-        result = await session.execute(
-            select(TableCertification).where(
-                TableCertification.id == doc_id,
-                TableCertification.certified == True,
-            )
-        )
-        return result.scalars().first() is not None
+    async def is_certified(self, db: firestore.AsyncClient, layer: str, table_name: str) -> bool:
+        return await self.get(db, layer, table_name) is not None
 
-    async def list_all(self, session: AsyncSession) -> List[Dict]:
-        result = await session.execute(select(TableCertification).where(TableCertification.certified == True))
-        rows = result.scalars().all()
-        return [
-            {
-                "layer": r.layer,
-                "table_name": r.table_name,
-                "certified": r.certified,
-                "certified_at": r.certified_at.isoformat() if r.certified_at else None,
-                "certified_by": r.certified_by,
-            }
-            for r in rows
-        ]
+    async def list_all(self, db: firestore.AsyncClient) -> List[Dict]:
+        query = db.collection(COLLECTION).where(filter=FieldFilter("certified", "==", True))
+        return [_to_status(snapshot.to_dict() or {}) async for snapshot in query.stream()]
 
 
 certification_repo = CertificationRepository()

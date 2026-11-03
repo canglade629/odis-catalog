@@ -35,7 +35,7 @@ nano .env  # or use your preferred editor
 Required changes in `.env`:
 
 ```bash
-# Storage & DB (see env.template: SCW_*, PG_DB_* or DATABASE_URL)
+# Storage & DB (see env.template: GCP_PROJECT_ID, BIGQUERY_DATASET_PREFIX, FIRESTORE_DATABASE)
 
 # API Configuration - CRITICAL: Replace with your generated secret
 ADMIN_SECRET=<generate-with-python-secrets-module>
@@ -68,7 +68,7 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 **Expected Output:**
 ```
-INFO:     Starting Odace Data Pipeline API
+INFO:     Starting ODAS API
 INFO:     Environment: development
 INFO:     Application startup complete.
 ```
@@ -88,22 +88,22 @@ If you see an error about insecure admin secret, you need to use a different val
 
 ### Step 4: Set secrets and environment
 
-Set in your deployment platform (e.g. Coolify environment variables):
+The Cloud Run service gets its configuration from the Cloud Build trigger (see README "Deployment"):
 
-- `ADMIN_SECRET` (generated securely)
-- `ENVIRONMENT=production`
-- `CORS_ORIGINS=https://yourdomain.com` (your actual domain(s))
-- Scaleway S3 and PostgreSQL vars (see env.template)
+- `ADMIN_SECRET` (generated securely, stored in Secret Manager, referenced by `_ADMIN_SECRET_NAME`)
+- `ENVIRONMENT=production` (set by `cloudbuild.yaml`)
+- `CORS_ORIGINS` (`_CORS_ORIGINS`, only needed for cross-origin callers)
+- BigQuery datasets and Firestore database (`_BIGQUERY_DATASET_PREFIX`, `_FIRESTORE_DATABASE`)
 
 ---
 
 ### Step 5: Deploy
 
-Deploy via Docker/Coolify (see README).
+Push to `main`: the Cloud Build trigger runs the tests, builds the image and deploys it to Cloud Run (see README).
 
 **Watch for startup errors:**
 ```bash
-# Check your deployment logs (e.g. Coolify dashboard)
+gcloud run services logs read <service> --region=<region> --limit=50
 ```
 
 ---
@@ -112,7 +112,7 @@ Deploy via Docker/Coolify (see README).
 
 **Test Health Endpoint:**
 ```bash
-# Use your deployment URL (e.g. from Coolify)
+# Use your deployment URL (Cloud Run service URL or custom domain)
 SERVICE_URL="https://odace.services.d4g.fr"
 curl $SERVICE_URL/health
 ```
@@ -154,11 +154,15 @@ If something goes wrong, you can rollback:
 
 ### Quick Rollback
 
-Use your deployment platform's rollback (e.g. Coolify: revert to previous deployment).
+Route traffic back to the previous Cloud Run revision:
+
+```bash
+gcloud run services update-traffic <service> --region=<region> --to-revisions=<previous-revision>=100
+```
 
 ### Emergency: Restore Old Secret
 
-Update `ADMIN_SECRET` in your deployment environment to a previous value if you have it stored securely.
+Add the previous value as a new version of the Secret Manager secret if you have it stored securely, then redeploy (or create a new revision).
 
 ---
 
@@ -201,7 +205,7 @@ Should NOT include `Access-Control-Allow-Origin: https://evil-site.com`
 
 ### Set Up Alerts
 
-Use your deployment platform's logging (e.g. Coolify logs) to monitor:
+Use Cloud Logging (Cloud Run service logs, optionally with log-based alerts) to monitor:
 
 1. **Rate limit violations** – filter for "Rate limit exceeded"
 2. **Authentication failures** – filter for "Invalid admin secret" or "Invalid API key"
@@ -218,7 +222,7 @@ Use your deployment platform's logging (e.g. Coolify logs) to monitor:
 **Solution:** 
 - Generate a new secret using the Python command in Step 1
 - Ensure it's not a common word or simple value
-- Update both local `.env` and deployment environment (e.g. Coolify env vars)
+- Update both local `.env` and the Secret Manager secret used by Cloud Run
 
 ---
 
@@ -226,7 +230,7 @@ Use your deployment platform's logging (e.g. Coolify logs) to monitor:
 
 **Error:** Browser shows CORS policy errors
 
-**Solution:** Update `CORS_ORIGINS` in your deployment environment (e.g. Coolify env vars) to include your front-end domain(s).
+**Solution:** Update the `_CORS_ORIGINS` substitution on the Cloud Build trigger to include your front-end domain(s), then redeploy.
 
 ---
 
@@ -249,8 +253,8 @@ Update rate limits in code if needed (not recommended for security):
 
 **Recovery:**
 1. Generate a new secret: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
-2. Set the new value in your deployment environment (e.g. Coolify env vars)
-3. Restart/redeploy the application
+2. Add it as a new version of the Secret Manager secret (`gcloud secrets versions add <secret> --data-file=-`)
+3. Redeploy the application (the service reads the `latest` version at startup)
 4. Update your local `.env` file
 5. **Revoke all API keys** if admin access was compromised
 6. Create new API keys for users via Admin API

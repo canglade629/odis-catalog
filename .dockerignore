@@ -22,4 +22,9 @@ ENV/
 .ipynb_checkpoints
 *.plan.md
 job/
+tests/
+.pytest_cache/
+# Generated API key emails contain live keys (same rule as .gitignore)
+scripts/email_templates/*.html
+!scripts/email_templates/SAMPLE*.html
 

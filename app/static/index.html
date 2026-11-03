@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Odace Data</title>
+    <title>ODAS · Open Data Accueil Solidaire</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/static/style.css">
@@ -19,7 +19,7 @@
             <!-- Logo / brand -->
             <div class="flex items-center gap-2.5">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-                <span class="font-bold text-[0.92rem] tracking-tight text-neutral-800">Odace <span class="text-neutral-400 font-medium">Data</span></span>
+                <span class="font-bold text-[0.92rem] tracking-tight text-neutral-800">ODAS <span class="text-neutral-400 font-medium">Open Data Accueil Solidaire</span></span>
             </div>
 
             <!-- Right side: badges + actions -->
@@ -62,7 +62,7 @@
             <div class="marketplace-hero">
                 <div class="marketplace-hero-inner">
                     <span class="marketplace-hero-eyebrow">Data Marketplace</span>
-                    <h1 class="marketplace-hero-title">Catalogue de données Odace</h1>
+                    <h1 class="marketplace-hero-title">Catalogue de données ODAS</h1>
                     <p class="marketplace-hero-subtitle">Explorez et accédez aux jeux de données certifiés de la plateforme</p>
                     <!-- View toggle: Catalogue / Vue d'ensemble -->
                     <div class="hero-view-toggle">
@@ -216,7 +216,7 @@
                                 </button>
                             </div>
                         </div>
-                        <textarea id="sql-editor" class="sql-editor w-full min-h-[200px] p-4 border border-neutral-300 rounded font-mono text-[0.9rem] leading-relaxed bg-neutral-50 text-neutral-800 resize-y focus:outline-none focus:border-neutral-700 focus:bg-white tab-size-4" placeholder="Enter SQL query here...&#10;&#10;Example:&#10;SELECT * FROM bronze_accueillants LIMIT 10;&#10;&#10;Tables are referenced as: layer_table_name&#10;  - bronze_accueillants&#10;  - silver_geo&#10;  - etc.&#10;&#10;Press Ctrl+Enter to run"></textarea>
+                        <textarea id="sql-editor" class="sql-editor w-full min-h-[200px] p-4 border border-neutral-300 rounded font-mono text-[0.9rem] leading-relaxed bg-neutral-50 text-neutral-800 resize-y focus:outline-none focus:border-neutral-700 focus:bg-white tab-size-4" placeholder="Enter a BigQuery SQL (GoogleSQL) SELECT query...&#10;&#10;Example:&#10;SELECT commune_label, region_code FROM dim_commune LIMIT 10&#10;&#10;Silver tables are referenced by name (dim_commune) or as odas_silver.dim_commune.&#10;Admins can also query odas_bronze.&lt;table&gt; and odas_gold.&lt;table&gt;.&#10;&#10;Press Ctrl+Enter to run"></textarea>
                         <div class="sql-editor-footer flex justify-between items-center text-[0.85rem] text-neutral-500 pt-1">
                             <span id="sql-query-info" class="sql-query-info italic"></span>
                         </div>
@@ -281,7 +281,7 @@
     <div id="api-key-modal" class="modal-overlay fixed inset-0 bg-black/50 z-[2000] items-center justify-center hidden" style="display: none;">
         <div class="modal-container bg-white rounded-lg shadow-lg max-w-[500px] w-[90%] flex flex-col overflow-hidden" onclick="event.stopPropagation()">
             <div class="modal-header flex justify-between items-center py-5 px-6 border-b-2 border-neutral-200 bg-neutral-100">
-                <h3 class="text-xl font-semibold text-neutral-800 m-0">Welcome to Odace Data</h3>
+                <h3 class="text-xl font-semibold text-neutral-800 m-0">Welcome to ODAS</h3>
             </div>
             <div class="modal-body p-6">
                 <p class="mb-5">Please enter your API key to continue:</p>
@@ -1468,7 +1468,7 @@
                 const gridDiv = document.getElementById('silver-catalog-grid');
                 gridDiv.innerHTML = '<p class="info-text">Chargement du catalogue...</p>';
                 
-                showStatus('Actualisation du catalogue depuis PostgreSQL…', 'info');
+                showStatus('Actualisation du catalogue depuis Firestore…', 'info');
                 
                 const refreshResponse = await fetch(`${API_BASE}/api/data/catalog/refresh`, {
                     method: 'POST',

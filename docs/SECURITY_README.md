@@ -97,9 +97,9 @@ If you see a list of pipelines: ✅ **You're ready!**
 
 Quick version:
 
-1. Set **ADMIN_SECRET** in your deployment environment (e.g. Coolify env vars).
-2. Set **CORS_ORIGINS** to your front-end domain(s) (no wildcard in production).
-3. Deploy via Docker/Coolify (see README).
+1. Store **ADMIN_SECRET** in Secret Manager (the Cloud Run service reads it from there).
+2. Set **CORS_ORIGINS** to your front-end domain(s) if the API is called from another origin (no wildcard in production).
+3. Deploy through the Cloud Build trigger (see README).
 
 ---
 
@@ -108,9 +108,9 @@ Quick version:
 Before deploying:
 
 1. ✅ **Generate strong admin secret** (use Python command above)
-2. ✅ **Set ADMIN_SECRET** in deployment environment (e.g. Coolify)
+2. ✅ **Set ADMIN_SECRET** in Secret Manager
 3. ✅ **Set CORS_ORIGINS** for production (no wildcard!)
-4. ✅ **Configure PostgreSQL** and Scaleway S3 (see env.template)
+4. ✅ **Configure Firestore** and the BigQuery datasets (see env.template)
 5. ✅ **Test locally first**
 
 **The application will refuse to start if you skip these steps.**
@@ -122,7 +122,7 @@ Before deploying:
 ### Quick Health Check
 
 ```bash
-# Use your deployment URL (e.g. Coolify or custom domain)
+# Use your deployment URL (Cloud Run service URL or custom domain)
 SERVICE_URL="https://odace.services.d4g.fr"
 
 # Test health
@@ -223,7 +223,7 @@ Check `SECURITY_MIGRATION_GUIDE.md` → "Common Issues and Solutions" section
 
 ### Security Best Practices
 
-- **Never commit secrets:** Always use environment variables (e.g. Coolify env vars)
+- **Never commit secrets:** Always use Secret Manager (Cloud Run) or a local `.env`
 - **Rotate secrets:** Plan to rotate admin secret quarterly
 - **Monitor logs:** Watch for authentication failures and rate limit violations
 - **Keep dependencies updated:** Regular security updates
@@ -232,7 +232,7 @@ Check `SECURITY_MIGRATION_GUIDE.md` → "Common Issues and Solutions" section
 
 - OWASP Top 10: https://owasp.org/www-project-top-ten/
 - FastAPI Security: https://fastapi.tiangolo.com/tutorial/security/
-- Store ADMIN_SECRET in your deployment platform (e.g. Coolify environment variables)
+- Store ADMIN_SECRET in Secret Manager: https://cloud.google.com/run/docs/configuring/services/secrets
 
 ---
 

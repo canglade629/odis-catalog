@@ -1,18 +1,7 @@
-"""Database layer: session, models, and repositories."""
-from app.db.session import get_db, async_session_factory, init_engine
-from app.db.models import (
-    ApiKey,
-    DataCatalogue,
-    TableCertification,
-    QueryTracker,
-)
+"""Database layer: Firestore client and repositories."""
+from app.db.firestore import get_db, get_firestore_client
 
 __all__ = [
     "get_db",
-    "async_session_factory",
-    "init_engine",
-    "ApiKey",
-    "DataCatalogue",
-    "TableCertification",
-    "QueryTracker",
+    "get_firestore_client",
 ]

@@ -1,8 +1,8 @@
-# Odace Data Model
+# ODAS Data Model
 
 ## Overview
 
-The Odace data platform follows a **medallion architecture** with three layers:
+The ODAS data platform follows a **medallion architecture** with three layers:
 
 - **Bronze**: Raw data ingestion (files + APIs)
 - **Silver**: Cleaned, standardized tables (8 tables)

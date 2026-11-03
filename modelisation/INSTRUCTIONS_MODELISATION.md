@@ -1,4 +1,4 @@
-# Instructions de Mise à Jour de la Modélisation - ODACE Platform
+# Instructions de Mise à Jour de la Modélisation - ODAS Platform
 
 **Date:** 2025-12-01  
 **Destinataires:** Équipe de développement  
@@ -8,7 +8,7 @@
 
 ## 📋 Contexte
 
-Ce document contient les instructions pour mettre à jour la modélisation existante des tables Bronze et Silver afin d'intégrer les bonnes pratiques de l'architecture Médaillon et de garantir la cohérence avec les standards du projet ODACE.
+Ce document contient les instructions pour mettre à jour la modélisation existante des tables Bronze et Silver afin d'intégrer les bonnes pratiques de l'architecture Médaillon et de garantir la cohérence avec les standards du projet ODAS.
 
 > **IMPORTANT**: Ce document applique les conventions de nommage définies dans `NAMING_CONVENTIONS.md` :
 > - **Français** pour les entités du domaine uniquement (loyer, commune, logement)

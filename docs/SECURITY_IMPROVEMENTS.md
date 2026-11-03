@@ -148,12 +148,10 @@ ENVIRONMENT=production
 
 ### 2. Update admin secret in deployment
 
-Set ADMIN_SECRET in your deployment environment (e.g. Coolify env vars):
+Store ADMIN_SECRET in Secret Manager (the Cloud Run service reads it from there):
 ```bash
-# Generate new admin secret
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-
-# Set in your deployment platform (e.g. Coolify env vars)
+# Generate a new admin secret and add it as a new secret version
+python -c "import secrets; print(secrets.token_urlsafe(32), end='')" | gcloud secrets versions add <secret> --data-file=-
 ```
 
 ### 3. Test in Staging First

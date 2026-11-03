@@ -1,13 +1,13 @@
-"""API Key authentication middleware (PostgreSQL-backed)."""
+"""API Key authentication middleware (Firestore-backed)."""
 import secrets
 from typing import NamedTuple
 
 from fastapi import HTTPException, Security, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
+from google.cloud import firestore
 
 from app.core.api_key_manager import validate_api_key
-from app.db.session import get_db
+from app.db.firestore import get_db
 
 security = HTTPBearer(auto_error=False)
 
@@ -20,7 +20,7 @@ class AuthenticatedUser(NamedTuple):
 
 async def verify_api_key(
     credentials: HTTPAuthorizationCredentials = Security(security),
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
 ) -> str:
     """
     Verify API key from Authorization Bearer token.
@@ -33,7 +33,7 @@ async def verify_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key is missing. Please provide Authorization: Bearer header.",
         )
-    user_data = await validate_api_key(credentials.credentials, session)
+    user_data = await validate_api_key(credentials.credentials, db)
     if not user_data:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -63,7 +63,7 @@ async def verify_admin_secret(
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(security),
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
 ) -> AuthenticatedUser:
     """
     Verify API key or admin secret and return current user (user_id + is_admin).
@@ -79,7 +79,7 @@ async def get_current_user(
     token = credentials.credentials
     if secrets.compare_digest(token, settings.admin_secret):
         return AuthenticatedUser(user_id="admin", is_admin=True)
-    user_data = await validate_api_key(token, session)
+    user_data = await validate_api_key(token, db)
     if not user_data:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -93,7 +93,7 @@ async def get_current_user(
 
 async def verify_admin_secret_or_admin_key(
     credentials: HTTPAuthorizationCredentials = Security(security),
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
 ) -> bool:
     """
     Verify admin access: either ADMIN_SECRET or a valid API key with is_admin=True.
@@ -108,7 +108,7 @@ async def verify_admin_secret_or_admin_key(
     token = credentials.credentials
     if secrets.compare_digest(token, settings.admin_secret):
         return True
-    user_data = await validate_api_key(token, session)
+    user_data = await validate_api_key(token, db)
     if user_data and user_data.get("is_admin") is True:
         return True
     raise HTTPException(

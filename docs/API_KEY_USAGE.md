@@ -14,7 +14,7 @@ The API key system allows you to:
 ## Security Features
 
 - **Secure Generation**: Keys use 256 bits of entropy via Python's `secrets` module
-- **Hashed Storage**: Keys are hashed with SHA-256 before storage in PostgreSQL
+- **Hashed Storage**: Keys are hashed with SHA-256 before storage in Firestore
 - **Bearer Token Auth**: Industry-standard `Authorization: Bearer` header
 - **Soft Delete**: Keys can be revoked (active=false) for audit trail
 - **Admin Protection**: Key management endpoints protected by separate admin secret
@@ -29,7 +29,7 @@ Update your `.env` file:
 ADMIN_SECRET=your-secure-admin-secret-here
 ```
 
-The `ADMIN_SECRET` protects the admin endpoints for creating/managing API keys. Also configure PostgreSQL (see [POSTGRESQL.md](POSTGRESQL.md)).
+The `ADMIN_SECRET` protects the admin endpoints for creating/managing API keys. Also configure the GCP project, BigQuery datasets and Firestore database (see the [README](../README.md#local-run)).
 
 ## Managing API Keys (Admin API)
 
@@ -132,22 +132,23 @@ response = requests.get("https://odace.services.d4g.fr/api/endpoint", headers=he
 - **401 Unauthorized**: API key is missing from the request
 - **403 Forbidden**: API key is invalid or has been revoked
 
-## PostgreSQL Schema
+## Firestore Storage
 
-API keys are stored in the `api_keys` table:
+API keys are stored in the `api_keys` collection, one document per key:
 
-- `key_hash`: SHA-256 hash of the API key (primary key)
+- Document id: SHA-256 hash of the API key
 - `user_id`: User email or identifier
-- `created_at`, `last_used_at`: Timestamps
+- `is_admin`: Admin access flag
+- `created_at`, `last_used_at`: Timestamps (`last_used_at` is refreshed at most every 5 minutes)
 - `active`: Whether the key is active (false = revoked)
 
-See [POSTGRESQL.md](POSTGRESQL.md) and [app/db/schema.sql](../app/db/schema.sql).
+See the Firestore data model in the [README](../README.md#firestore-data-model).
 
 ## Migration from Old System
 
 The old single `API_KEY` system has been replaced. You need to:
 
-1. **Update your `.env` file**: Add `ADMIN_SECRET` and PostgreSQL vars.
+1. **Update your `.env` file**: Add `ADMIN_SECRET` and the GCP vars (`GCP_PROJECT_ID`, `BIGQUERY_DATASET_PREFIX`, `FIRESTORE_DATABASE`).
 2. **Create API keys** via the Admin API (see above).
 3. **Update client code** to use `Authorization: Bearer` header.
 4. **Distribute API keys** to your users securely.
@@ -169,11 +170,11 @@ The old single `API_KEY` system has been replaced. You need to:
 
 ### "Invalid or inactive API key"
 - Verify the key hasn't been revoked (list keys via Admin API)
-- Ensure the key exists in the database (PostgreSQL)
+- Ensure the key exists in the `api_keys` Firestore collection
 
-### Database connection issues
-- Verify `PG_DB_*` or `DATABASE_URL` is set correctly
-- Ensure the app can reach PostgreSQL (network, credentials). See [POSTGRESQL.md](POSTGRESQL.md).
+### Firestore connection issues
+- Verify `GCP_PROJECT_ID` and `FIRESTORE_DATABASE` are set correctly
+- Ensure the credentials have Firestore access (`roles/datastore.user`): locally `gcloud auth application-default login`, on Cloud Run the service's runtime service account. See the [README](../README.md#deployment).
 
 ## Support
 

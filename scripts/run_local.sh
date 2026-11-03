@@ -3,13 +3,14 @@
 
 set -e
 
-echo "🔧 Starting Odace Data Pipeline in development mode"
+echo "🔧 Starting ODAS API in development mode"
 
 # Check if .env exists
 if [ ! -f .env ]; then
     echo "⚠️  .env file not found. Copy env.template to .env:"
     echo "   cp env.template .env"
-    echo "📝 Then edit .env with Scaleway S3 and PostgreSQL settings"
+    echo "📝 Then edit .env with your GCP project and ADMIN_SECRET"
+    echo "🔑 And authenticate once: gcloud auth application-default login"
     exit 1
 fi
 

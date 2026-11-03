@@ -1,8 +1,8 @@
-"""Table Certification Manager (PostgreSQL-backed)."""
+"""Table Certification Manager (Firestore-backed)."""
 from datetime import datetime
 from typing import Optional, Dict, List
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from google.cloud import firestore
 
 from app.db.repositories.certifications import certification_repo
 
@@ -11,10 +11,10 @@ async def certify_table(
     layer: str,
     table_name: str,
     admin_id: str,
-    session: AsyncSession,
+    db: firestore.AsyncClient,
 ) -> Dict:
     """Certify a table for public use."""
-    await certification_repo.set(session, layer, table_name, admin_id)
+    await certification_repo.set(db, layer, table_name, admin_id)
     return {
         "layer": layer,
         "table_name": table_name,
@@ -27,30 +27,30 @@ async def certify_table(
 async def uncertify_table(
     layer: str,
     table_name: str,
-    session: AsyncSession,
+    db: firestore.AsyncClient,
 ) -> bool:
     """Remove certification from a table."""
-    return await certification_repo.delete(session, layer, table_name)
+    return await certification_repo.delete(db, layer, table_name)
 
 
 async def is_table_certified(
     layer: str,
     table_name: str,
-    session: AsyncSession,
+    db: firestore.AsyncClient,
 ) -> bool:
     """Check if a table is certified."""
-    return await certification_repo.is_certified(session, layer, table_name)
+    return await certification_repo.is_certified(db, layer, table_name)
 
 
 async def get_certification_status(
     layer: str,
     table_name: str,
-    session: AsyncSession,
+    db: firestore.AsyncClient,
 ) -> Optional[Dict]:
     """Get detailed certification status for a table."""
-    return await certification_repo.get(session, layer, table_name)
+    return await certification_repo.get(db, layer, table_name)
 
 
-async def get_all_certifications(session: AsyncSession) -> List[Dict]:
+async def get_all_certifications(db: firestore.AsyncClient) -> List[Dict]:
     """Get all table certifications."""
-    return await certification_repo.list_all(session)
+    return await certification_repo.list_all(db)

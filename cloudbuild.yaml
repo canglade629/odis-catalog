@@ -1,0 +1,64 @@
+# Run by the Cloud Build GitHub trigger on pushes to main, or by hand with `gcloud builds submit`
+# (see README "Deployment"): unit tests -> Docker image in Artifact Registry -> public Cloud Run service (API + UI).
+# Defaults follow the odis-stream2-app conventions; override them on the trigger or with --substitutions.
+substitutions:
+  _REGION: europe-west1
+  _AR_REPOSITORY: odis-stream2-repo  # shared Docker repository of the project
+  _SERVICE: odas-app
+  _RUNTIME_SERVICE_ACCOUNT: odas-run@${PROJECT_ID}.iam.gserviceaccount.com  # Firestore user, BigQuery reader, secret accessor
+  _BIGQUERY_DATASET_PREFIX: odas  # datasets <prefix>_bronze, <prefix>_silver, <prefix>_gold, in _REGION
+  _FIRESTORE_DATABASE: (default)
+  _ADMIN_SECRET_NAME: ODAS_ADMIN_SECRET  # Secret Manager secret holding ADMIN_SECRET
+  _CORS_ORIGINS: ""                      # comma-separated; empty = same-origin only (the UI is served by the API)
+  _CPU: "1"
+  _MEMORY: 2Gi
+  _MAX_INSTANCES: "2"
+  _IMAGE_TAG: ${COMMIT_SHA}  # only set for trigger builds; pass _IMAGE_TAG to gcloud builds submit
+  _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+
+options:
+  dynamicSubstitutions: true
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1200s
+
+steps:
+  - id: test
+    name: python:3.11-slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        for name in _IMAGE_TAG=${_IMAGE_TAG} _AR_REPOSITORY=${_AR_REPOSITORY} _SERVICE=${_SERVICE} _RUNTIME_SERVICE_ACCOUNT=${_RUNTIME_SERVICE_ACCOUNT} _BIGQUERY_DATASET_PREFIX=${_BIGQUERY_DATASET_PREFIX} _ADMIN_SECRET_NAME=${_ADMIN_SECRET_NAME}; do
+          if [ -z "$${name#*=}" ]; then echo "Substitution $${name%%=*} is empty"; exit 1; fi
+        done
+        pip install --quiet --no-cache-dir -r requirements-test.txt && python -m pytest -q
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: [build, -t, "${_IMAGE}", .]
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, "${_IMAGE}"]
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_IMAGE}
+      - --region=${_REGION}
+      - --service-account=${_RUNTIME_SERVICE_ACCOUNT}
+      - --allow-unauthenticated  # the UI and API handle authentication themselves
+      - --labels=app=odas
+      - --set-env-vars=^;^ENVIRONMENT=production;GCP_PROJECT_ID=${PROJECT_ID};BIGQUERY_DATASET_PREFIX=${_BIGQUERY_DATASET_PREFIX};BIGQUERY_LOCATION=${_REGION};FIRESTORE_DATABASE=${_FIRESTORE_DATABASE};CORS_ORIGINS=${_CORS_ORIGINS}
+      - --set-secrets=ADMIN_SECRET=${_ADMIN_SECRET_NAME}:latest
+      - --cpu=${_CPU}
+      - --memory=${_MEMORY}
+      - --min-instances=0
+      - --max-instances=${_MAX_INSTANCES}
+      - --timeout=300
+      - --quiet

@@ -2,7 +2,7 @@
 
 Ce dossier contient les emails HTML générés automatiquement pour l'envoi de clés API aux utilisateurs.
 
-**Application hébergée :** [https://odace.services.d4g.fr/](https://odace.services.d4g.fr/) — Odace Data Pipeline (interface, catalogue, pipelines, documentation API).
+**Application hébergée :** [https://odace.services.d4g.fr/](https://odace.services.d4g.fr/) — ODAS, Open Data Accueil Solidaire (interface, catalogue, pipelines, documentation API).
 
 ## Fichiers
 
@@ -33,7 +33,7 @@ Le script vous demandera :
 4. Cliquez sur les trois points (⋮) en bas à droite
 5. Sélectionnez "Mode HTML d'origine" ou "Show original HTML"
 6. Collez le contenu HTML
-7. Ajoutez le sujet : **Votre clé API ODACE - Accès autorisé**
+7. Ajoutez le sujet : **Votre clé API ODAS - Accès autorisé**
 8. Envoyez à l'utilisateur
 
 ## Structure de l'email

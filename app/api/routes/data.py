@@ -1,86 +1,79 @@
 """Data catalog API routes."""
-import io
+import asyncio
 import logging
+import math
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Request, Security
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import AsyncIterator, List, Optional, Dict, Any
+from google.api_core import exceptions as google_exceptions
+from google.cloud import firestore
+from typing import List, Optional, Dict, Any, Sequence
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy.ext.asyncio import AsyncSession
-import numpy as np
-import pandas as pd
-import sqlglot
 
-from app.core.auth import verify_api_key, verify_admin_secret, verify_api_key_or_admin, get_current_user, AuthenticatedUser
-from app.db.session import get_db
+from app.core.auth import verify_api_key_or_admin, get_current_user, AuthenticatedUser
+from app.db.firestore import get_db
 from app.db.repositories.catalogue import catalogue_repo, CATALOGUE_META_ID
+from app.db.repositories.usage import EXPORT_BYTES, QUERY_BYTES_BILLED, usage_repo
 from app.core.config import get_settings
-from app.utils.iceberg_ops import resolve_metadata_path
-from app.utils.sql_executor import get_sql_executor
 from app.core.rate_limiter import limiter
-from app.core.certification_manager import get_certification_status
+from app.core.certification_manager import get_all_certifications, get_certification_status
+from app.utils import bigquery_ops
+from app.utils.query_tracker import get_query_counts, increment_query_count
 
 logger = logging.getLogger(__name__)
 
-security = HTTPBearer(auto_error=False)
-
-MAX_TABLES_PER_QUERY = 10
-QUERY_TIMEOUT_SECONDS = 60
+MAX_QUERY_ROWS = 10_000
+MAX_PREVIEW_ROWS = 1_000
 
 
 def _make_json_serializable(obj: Any) -> Any:
-    """Recursively convert bytes, numpy types, etc. to JSON-serializable values."""
+    """Recursively convert bytes, decimals and non-finite floats to JSON-serializable values."""
     if isinstance(obj, dict):
         return {k: _make_json_serializable(v) for k, v in obj.items()}
     if isinstance(obj, list):
         return [_make_json_serializable(v) for v in obj]
     if isinstance(obj, bytes):
         return "<binary>"
-    if isinstance(obj, (np.integer, np.int64, np.int32)):
-        return int(obj)
-    if isinstance(obj, (np.floating, np.float64, np.float32)):
-        return float(obj) if np.isfinite(obj) else None
-    if isinstance(obj, np.bool_):
-        return bool(obj)
-    if isinstance(obj, np.ndarray):
-        return _make_json_serializable(obj.tolist())
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
     if isinstance(obj, Decimal):
         return float(obj) if obj.is_finite() else None
     return obj
 
 
-def _is_select_query(sql: str) -> bool:
-    """Return True only for SELECT or WITH (CTE) statements; block DDL/DML."""
-    first_word = sql.strip().split()[0].upper() if sql.strip() else ""
-    return first_word in ("SELECT", "WITH")
+async def _ensure_within_budget(db: firestore.AsyncClient, field: str, budget: int, what: str) -> None:
+    if (await usage_repo.today(db))[field] >= budget:
+        raise HTTPException(
+            status_code=429,
+            detail=f"The daily {what} budget of the API is used up; try again tomorrow (UTC).",
+        )
 
 
-def _extract_table_names(sql: str, known_tables: List[str]) -> List[str]:
-    """Extract referenced table names by parsing SQL with sqlglot."""
-    lower_to_actual = {name.lower(): name for name in known_tables}
-    parsed = sqlglot.parse_one(sql, read="duckdb")
-    referenced = set()
-    for table in parsed.find_all(sqlglot.exp.Table):
-        table_name = table.name.lower()
-        if table_name in lower_to_actual:
-            referenced.add(lower_to_actual[table_name])
-    return sorted(referenced)
-
-
-def _build_s3_config(settings: Any) -> Dict[str, str]:
-    return {
-        "endpoint": settings.scw_object_storage_endpoint,
-        "access_key_id": settings.scw_access_key,
-        "secret_access_key": settings.scw_secret_key,
-        "region": settings.scw_region,
-    }
-
-
-def _sanitize_preview_df(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    return _make_json_serializable(df.to_dict(orient="records"))
+async def _run_billed_query(
+    db: firestore.AsyncClient,
+    sql: str,
+    *,
+    endpoint: str,
+    limit: int,
+    offset: int = 0,
+    parameters: Sequence[Any] = (),
+) -> bigquery_ops.Page:
+    """Run a BigQuery query within the daily bytes budget, mapping its errors to HTTP errors."""
+    await _ensure_within_budget(db, QUERY_BYTES_BILLED, get_settings().query_daily_bytes_budget, "query")
+    try:
+        page = await asyncio.to_thread(
+            bigquery_ops.run_query, sql, endpoint=endpoint, limit=limit, offset=offset, parameters=parameters
+        )
+    except bigquery_ops.QueryTimeout as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except bigquery_ops.QueryRejected as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except (google_exceptions.BadRequest, google_exceptions.NotFound) as exc:
+        raise HTTPException(status_code=400, detail=f"Query failed: {exc.message}") from exc
+    if page.bytes_billed:
+        await usage_repo.add(db, QUERY_BYTES_BILLED, page.bytes_billed)
+    return page
 
 
 def _as_dict_or_none(value: Any) -> Optional[Dict[str, Any]]:
@@ -107,7 +100,7 @@ def _as_str_or_none(value: Any) -> Optional[str]:
 async def verify_table_access(
     layer: str,
     table_name: str,
-    session: AsyncSession,
+    db: firestore.AsyncClient,
     current_user: AuthenticatedUser,
 ) -> None:
     """
@@ -131,34 +124,34 @@ async def verify_table_access(
 
     # Certification restriction temporarily disabled.
     # Re-enable this block when certified-only access is required again:
-    # certified = await is_table_certified(layer, table_name, session)
+    # certified = await is_table_certified(layer, table_name, db)
     # if not certified:
     #     raise HTTPException(
     #         status_code=403,
     #         detail=f"Table {table_name} is not certified for public use. Please contact an administrator."
     #     )
 
-async def load_catalogue_from_db(session: AsyncSession) -> Dict[str, Any]:
-    """Build a compatibility in-memory view from V2 per-table catalogue rows."""
+async def load_catalogue_from_db(db: firestore.AsyncClient) -> Dict[str, Any]:
+    """Build a compatibility in-memory view from V2 per-table catalogue documents."""
     try:
-        rows = await catalogue_repo.list_table_rows(session)
-        meta = await catalogue_repo.get_meta_row(session) or {}
+        rows = await catalogue_repo.list_table_rows(db)
+        meta = await catalogue_repo.get_meta_row(db) or {}
         tables = {table_id: document for table_id, document in rows}
-        logger.info("Loaded V2 catalogue rows from DB with %d tables", len(tables))
+        logger.info("Loaded V2 catalogue documents from Firestore with %d tables", len(tables))
         return {"tables": tables, "_catalogue_meta": meta}
     except Exception as e:
-        logger.error("Error loading catalogue from DB: %s", e)
+        logger.error("Error loading catalogue from Firestore: %s", e)
         return {"tables": {}}
 
 
-async def load_silver_catalog_rows(session: AsyncSession) -> List[tuple[str, Dict[str, Any]]]:
-    """Load all table rows from V2 data_catalogue model."""
-    return await catalogue_repo.list_table_rows(session)
+async def load_silver_catalog_rows(db: firestore.AsyncClient) -> List[tuple[str, Dict[str, Any]]]:
+    """Load all table documents from the V2 data_catalogue collection."""
+    return await catalogue_repo.list_table_rows(db)
 
 
-async def load_catalogue_meta(session: AsyncSession) -> Dict[str, Any]:
-    """Load _catalogue_meta row from V2 data_catalogue model."""
-    return await catalogue_repo.get_meta_row(session) or {}
+async def load_catalogue_meta(db: firestore.AsyncClient) -> Dict[str, Any]:
+    """Load the _catalogue_meta document from the V2 data_catalogue collection."""
+    return await catalogue_repo.get_meta_row(db) or {}
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
@@ -236,7 +229,7 @@ class QueryResponse(BaseModel):
 class SilverTableInfo(BaseModel):
     """Silver table information with French description."""
     name: str
-    actual_table_name: str  # The actual Delta table name (e.g., dim_commune)
+    actual_table_name: str  # The table name in the silver dataset (e.g., dim_commune)
     description_fr: str
     dependencies: List[str]
     version: int
@@ -299,47 +292,21 @@ class SilverTableDetail(BaseModel):
 async def get_catalog(
     request: Request,
     user_id: str = Depends(verify_api_key_or_admin),
-    session: AsyncSession = Depends(get_db),
 ):
     """Get the complete data catalog with all schemas and tables.
 
-    Silver tables are read from the data_catalogue PostgreSQL document.
-    Bronze tables are read from the iceberg_tables catalog table (PyIceberg SqlCatalog).
-    Gold is not yet populated and returns an empty list.
-    No S3 reads — all data comes from PostgreSQL.
+    Each layer lists the tables of its BigQuery dataset (cached listing); a layer whose listing
+    fails is returned empty.
     """
-    logger.info("Fetching data catalog from PostgreSQL")
-    from sqlalchemy import text
-
-    try:
-        # Silver: from pipeline-written data_catalogue document
-        rows = await load_silver_catalog_rows(session)
-        silver_tables = [
-            TableInfo(name=name, path=f"silver/{name}", version=0)
-            for name, _ in sorted(rows, key=lambda row: row[0])
-        ]
-
-        # Bronze: from PyIceberg's SqlCatalog (iceberg_tables)
-        bronze_tables = []
+    schemas: Dict[str, List[TableInfo]] = {}
+    for layer in bigquery_ops.LAYERS:
         try:
-            result = await session.execute(
-                text(
-                    "SELECT table_name FROM iceberg_tables "
-                    "WHERE table_namespace = 'bronze' ORDER BY table_name"
-                )
-            )
-            bronze_tables = [
-                TableInfo(name=row[0], path=f"bronze/{row[0]}", version=0)
-                for row in result
-            ]
+            names = await asyncio.to_thread(bigquery_ops.list_table_names, layer)
         except Exception as e:
-            logger.warning("Could not read bronze tables from iceberg_tables: %s", e)
-
-        return CatalogResponse(schemas={"bronze": bronze_tables, "silver": silver_tables, "gold": []})
-
-    except Exception as e:
-        logger.error("Error fetching catalog: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch catalog: {str(e)}")
+            logger.warning("Could not list %s tables in BigQuery: %s", layer, e)
+            names = []
+        schemas[layer] = [TableInfo(name=name, path=f"{layer}/{name}", version=0) for name in names]
+    return CatalogResponse(schemas=schemas)
 
 
 @router.get("/catalog/silver", response_model=SilverCatalogResponse)
@@ -347,7 +314,7 @@ async def get_catalog(
 async def get_silver_catalog(
     request: Request,
     user_id: str = Depends(verify_api_key_or_admin),
-    session: AsyncSession = Depends(get_db)
+    db: firestore.AsyncClient = Depends(get_db)
 ):
     """
     Get catalog of silver tables with French descriptions.
@@ -355,17 +322,20 @@ async def get_silver_catalog(
     Returns all silver layer tables with their French descriptions, dependencies,
     and basic metadata. Uses direct table names (dim_*, fact_*).
     
-    Reads entirely from PostgreSQL catalogue cache for maximum speed.
+    Reads entirely from the Firestore catalogue (cached per instance) for maximum speed.
     """
     logger.info("Fetching silver catalog with French descriptions")
 
     try:
-        # Import query tracker
-        from app.utils.query_tracker import get_table_query_count
-
-        # Load catalogue from PostgreSQL — single source of truth (written by dbt)
-        rows = await load_silver_catalog_rows(session)
-        meta = await load_catalogue_meta(session)
+        # Load catalogue from Firestore — single source of truth (written by dbt)
+        rows = await load_silver_catalog_rows(db)
+        meta = await load_catalogue_meta(db)
+        certifications = {
+            cert["table_name"]: cert
+            for cert in await get_all_certifications(db)
+            if cert.get("layer") == "silver"
+        }
+        query_counts = await get_query_counts(db)
 
         tables = []
         for table_name, catalogue_info in sorted(rows, key=lambda row: row[0]):
@@ -379,11 +349,8 @@ async def get_silver_catalog(
             if schema_cache.get("drift_details") is not None and drift_details is None:
                 logger.warning("Ignoring non-dict drift_details for table '%s'", table_name)
 
-            # Get certification status from PostgreSQL (fast)
-            cert_status = await get_certification_status("silver", table_name, session)
-
-            # Get query count from PostgreSQL
-            query_count = await get_table_query_count(session, f"silver_{table_name}")
+            cert_status = certifications.get(table_name)
+            query_count = query_counts.get(f"silver_{table_name}", 0)
 
             tables.append(SilverTableInfo(
                 name=table_name,
@@ -430,13 +397,13 @@ async def get_silver_table_detail(
     request: Request,
     table_name: str,
     user_id: str = Depends(verify_api_key_or_admin),
-    session: AsyncSession = Depends(get_db)
+    db: firestore.AsyncClient = Depends(get_db)
 ):
     """
     Get detailed information about a specific silver table.
     
     Returns table metadata, schema, French description, dependencies,
-    and first 10 rows of data. All data is cached in PostgreSQL for fast access.
+    and first 10 rows of data. All data is cached in Firestore for fast access.
     
     Args:
         table_name: Name of the silver table
@@ -444,7 +411,7 @@ async def get_silver_table_detail(
     logger.info(f"Fetching details for silver.{table_name}")
 
     try:
-        table_catalogue = await catalogue_repo.get_table_row(session, table_name)
+        table_catalogue = await catalogue_repo.get_table_row(db, table_name)
 
         if not table_catalogue:
             raise HTTPException(status_code=404, detail=f"Table {table_name} not found in catalogue")
@@ -501,7 +468,7 @@ async def get_silver_table_detail(
         )
         
         # Get certification status
-        cert_status = await get_certification_status("silver", table_name, session)
+        cert_status = await get_certification_status("silver", table_name, db)
         
         business_metadata = _as_dict_or_none(table_catalogue.get("business_metadata")) or {}
         raw_sources = _as_list(business_metadata.get("sources"))
@@ -510,10 +477,10 @@ async def get_silver_table_detail(
             logger.warning("Ignoring non-dict drift_details for table detail '%s'", table_name)
         sources = [
             SourceInfo(
-                # Accept both YAML convention (name) and Postgres DBT convention (source_key)
+                # Accept both YAML convention (name) and pipeline catalogue convention (source_key)
                 name=s.get("name") or s.get("source_key", ""),
                 description=s.get("description"),
-                # Accept both YAML convention (download_url) and Postgres DBT convention (url)
+                # Accept both YAML convention (download_url) and pipeline catalogue convention (url)
                 download_url=s.get("download_url") or s.get("url"),
                 doc_url=s.get("doc_url"),
             )
@@ -555,7 +522,8 @@ async def get_table_metadata(
     request: Request,
     layer: str,
     table: str,
-    user_id: str = Depends(verify_api_key_or_admin)
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: firestore.AsyncClient = Depends(get_db),
 ):
     """
     Get metadata for a specific table including schema and row count.
@@ -564,55 +532,20 @@ async def get_table_metadata(
         layer: Layer name (bronze, silver, gold)
         table: Table name
     """
-    logger.info(f"Fetching metadata for {layer}.{table}")
-    settings = get_settings()
-    executor = get_sql_executor()
-    
-    # Validate layer
-    if layer not in ["bronze", "silver", "gold"]:
+    if layer not in bigquery_ops.LAYERS:
         raise HTTPException(status_code=400, detail="Layer must be bronze, silver, or gold")
-    
-    # Construct table path
-    if layer == "silver":
-        table_path = settings.get_silver_path(table)
-    elif layer == "bronze":
-        table_path = settings.get_bronze_path(table)
-    else:
-        table_path = settings.get_gold_path(table)
-    
-    try:
-        metadata_path = await resolve_metadata_path(
-            session,
-            layer=layer,
-            table_name=table,
-            table_path=table_path,
-        )
-        if not metadata_path:
-            raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
+    await verify_table_access(layer, table, db, current_user)
 
-        logger.info(
-            "Resolved metadata for %s.%s -> %s",
-            layer,
-            table,
-            metadata_path,
-        )
-        executor.register_iceberg_view(
-            table_name=table,
-            metadata_path=metadata_path,
-            s3_config=_build_s3_config(settings),
-        )
-        schema_info = executor.get_table_schema(table)
-        return TableSchema(
-            fields=[SchemaField(name=field["name"], type=field["type"], nullable=field["nullable"]) for field in schema_info["fields"]],
-            version=int(schema_info["version"]),
-            row_count=schema_info["row_count"],
-            num_fields=int(schema_info["num_fields"]),
-        )
-    except HTTPException:
-        raise
+    try:
+        bq_table = await asyncio.to_thread(bigquery_ops.get_table, layer, table)
     except Exception as e:
-        logger.error(f"Error fetching table metadata: {e}", exc_info=True)
+        logger.error("Error fetching table metadata for %s.%s: %s", layer, table, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch table metadata: {str(e)}")
+    if bq_table is None:
+        raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
+
+    fields = [SchemaField(**field) for field in bigquery_ops.schema_fields(bq_table)]
+    return TableSchema(fields=fields, version=0, row_count=bq_table.num_rows, num_fields=len(fields))
 
 
 @router.post("/preview/{layer}/{table}", response_model=PreviewResponse)
@@ -623,7 +556,7 @@ async def preview_table(
     table: str,
     preview_req: PreviewRequest,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db)
+    db: firestore.AsyncClient = Depends(get_db)
 ):
     """
     Get a preview of table data with optional filtering and sorting.
@@ -634,20 +567,14 @@ async def preview_table(
         preview_req: Preview request with filters and sort options
     """
     logger.info(f"Previewing {layer}.{table} with filters={preview_req.filters}, sort={preview_req.sort_by}")
-    settings = get_settings()
-    executor = get_sql_executor()
-    
-    # Validate layer
-    if layer not in ["bronze", "silver", "gold"]:
+    if layer not in bigquery_ops.LAYERS:
         raise HTTPException(status_code=400, detail="Layer must be bronze, silver, or gold")
-    
-    # Check access permissions
-    await verify_table_access(layer, table, session, current_user)
+    await verify_table_access(layer, table, db, current_user)
 
-    # Silver: serve the 10-row cached preview from PostgreSQL — fast and no S3 reads.
+    # Silver: serve the 10-row cached preview from the Firestore catalogue, without reading BigQuery.
     # Filters and sort are ignored for the cached version (same 10 rows used in the catalogue modal).
     if layer == "silver":
-        table_doc = await catalogue_repo.get_table_row(session, table) or {}
+        table_doc = await catalogue_repo.get_table_row(db, table) or {}
         schema_cache = table_doc.get("schema_cache", {})
         runtime_hints = table_doc.get("runtime_hints", {})
         cached = _make_json_serializable(
@@ -666,81 +593,43 @@ async def preview_table(
                 preview_rows=len(sliced),
             )
 
-    # Bronze / Gold (admin only): fall back to live Iceberg scan
-    # Construct table path
-    if layer == "silver":
-        table_path = settings.get_silver_path(table)
-    elif layer == "bronze":
-        table_path = settings.get_bronze_path(table)
-    else:
-        table_path = settings.get_gold_path(table)
-    
     try:
-        metadata_path = await resolve_metadata_path(
-            session,
-            layer=layer,
-            table_name=table,
-            table_path=table_path,
-        )
-        if not metadata_path:
-            raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
-
-        logger.info(
-            "Resolved metadata for %s.%s -> %s",
-            layer,
-            table,
-            metadata_path,
-        )
-        executor.register_iceberg_view(
-            table_name=table,
-            metadata_path=metadata_path,
-            s3_config=_build_s3_config(settings),
-        )
-
-        total_rows = int(executor.execute_query(f"SELECT COUNT(*) AS c FROM {table}").iloc[0]["c"])
-        scan_limit = max(preview_req.limit * 10, preview_req.limit)
-        df = executor.execute_query(f"SELECT * FROM {table} LIMIT {scan_limit}")
-
-        if preview_req.filters:
-            for spec in preview_req.filters:
-                col = spec.column
-                op = spec.operator
-                val = spec.value
-                if col in df.columns:
-                    try:
-                        if op == "=":
-                            df = df[df[col] == val]
-                        elif op == "!=":
-                            df = df[df[col] != val]
-                        elif op == "contains":
-                            df = df[df[col].astype(str).str.contains(str(val), case=False, na=False)]
-                        elif op == ">":
-                            df = df[df[col] > float(val)]
-                        elif op == "<":
-                            df = df[df[col] < float(val)]
-                        elif op == ">=":
-                            df = df[df[col] >= float(val)]
-                        elif op == "<=":
-                            df = df[df[col] <= float(val)]
-                    except Exception as exc:
-                        logger.warning("Filter failed for %s %s %s: %s", col, op, val, exc)
-
-        filtered_rows = len(df)
-        if preview_req.sort_by and preview_req.sort_by in df.columns:
-            df = df.sort_values(by=preview_req.sort_by, ascending=(preview_req.sort_order.lower() == "asc"))
-        preview_df = df.head(preview_req.limit)
-
-        return PreviewResponse(
-            columns=list(preview_df.columns),
-            data=_sanitize_preview_df(preview_df),
-            total_rows=total_rows,
-            filtered_rows=filtered_rows,
-            preview_rows=len(preview_df),
-        )
-    
+        bq_table = await asyncio.to_thread(bigquery_ops.get_table, layer, table)
     except Exception as e:
-        logger.error(f"Error previewing table: {e}", exc_info=True)
+        logger.error("Error previewing %s.%s: %s", layer, table, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to preview table: {str(e)}")
+    if bq_table is None:
+        raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
+
+    limit = max(min(preview_req.limit, MAX_PREVIEW_ROWS), 0)
+    total_rows = bq_table.num_rows or 0
+    if not preview_req.filters and not preview_req.sort_by:
+        page = await asyncio.to_thread(bigquery_ops.head, bq_table, limit)
+        return PreviewResponse(
+            columns=page.columns,
+            data=_make_json_serializable(page.rows),
+            total_rows=total_rows,
+            filtered_rows=total_rows,
+            preview_rows=len(page.rows),
+        )
+
+    try:
+        sql, parameters = bigquery_ops.preview_query(
+            bq_table, preview_req.filters or [], preview_req.sort_by, preview_req.sort_order, limit
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    page = await _run_billed_query(db, sql, endpoint="preview", limit=limit, parameters=parameters)
+    filtered_rows = int(page.rows[0][bigquery_ops.FILTERED_ROWS_COLUMN]) if page.rows else 0
+    for row in page.rows:
+        row.pop(bigquery_ops.FILTERED_ROWS_COLUMN, None)
+    return PreviewResponse(
+        columns=[column for column in page.columns if column != bigquery_ops.FILTERED_ROWS_COLUMN],
+        data=_make_json_serializable(page.rows),
+        total_rows=total_rows,
+        filtered_rows=filtered_rows,
+        preview_rows=len(page.rows),
+    )
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -749,117 +638,38 @@ async def execute_sql_query(
     request: Request,
     query_req: QueryRequest,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db)
+    db: firestore.AsyncClient = Depends(get_db)
 ):
-    """Execute a SQL SELECT query against the data lake with cursor-style pagination.
+    """Run a BigQuery SQL (GoogleSQL) SELECT query with cursor-style pagination.
 
-    Regular users may only run SELECT statements against silver tables.
-    Admin users may run any SQL against all available tables.
-    Results are capped at min(requested limit, 10 000) rows per page.
-    Use `offset` to paginate through large result sets.
+    Only a single SELECT statement is accepted. Silver tables are referenced by name (`dim_commune`)
+    or as `odas_silver.dim_commune`; admins may also read `odas_bronze.<table>` and `odas_gold.<table>`.
+    Results are capped at min(requested limit, 10 000) rows per page. Use `offset` to paginate:
+    BigQuery caches the result, so the next pages of the same SQL are not billed again.
     `has_more=true` in the response indicates another page exists.
     """
-    if not current_user.is_admin and not _is_select_query(query_req.sql):
-        raise HTTPException(
-            status_code=403,
-            detail="Only SELECT queries are allowed for non-admin users.",
-        )
-
-    settings = get_settings()
-    executor = get_sql_executor()
+    allowed_layers = bigquery_ops.LAYERS if current_user.is_admin else ("silver",)
     try:
-        rows = await load_silver_catalog_rows(session)
-        all_silver_names = [table_name for table_name, _ in rows]
-        try:
-            referenced_tables = _extract_table_names(query_req.sql, all_silver_names)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid SQL query: {exc}") from exc
+        prepared = await asyncio.to_thread(bigquery_ops.prepare_user_query, query_req.sql, allowed_layers)
+    except bigquery_ops.QueryRejected as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-        if len(referenced_tables) > MAX_TABLES_PER_QUERY:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Query references {len(referenced_tables)} tables "
-                    f"(max allowed is {MAX_TABLES_PER_QUERY})."
-                ),
-            )
+    limit = max(min(query_req.limit, MAX_QUERY_ROWS), 0)
+    offset = max(query_req.offset, 0)
+    start = time.monotonic()
+    page = await _run_billed_query(db, prepared.sql, endpoint="query", limit=limit, offset=offset)
+    elapsed_ms = (time.monotonic() - start) * 1000
 
-        if not current_user.is_admin:
-            disallowed = [name for name in referenced_tables if name not in all_silver_names]
-            if disallowed:
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"Only silver tables are allowed for non-admin users: {', '.join(disallowed)}",
-                )
-
-        s3_config = _build_s3_config(settings)
-
-        for table_name in referenced_tables:
-            table_path = settings.get_silver_path(table_name)
-            metadata_path = await resolve_metadata_path(
-                session,
-                layer="silver",
-                table_name=table_name,
-                table_path=table_path,
-            )
-            if not metadata_path:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Could not find Iceberg metadata for table: {table_name}",
-                )
-            logger.info(
-                "Query table resolution: table=%s table_path=%s metadata_path=%s",
-                table_name,
-                table_path,
-                metadata_path,
-            )
-            executor.register_iceberg_view(table_name, metadata_path, s3_config)
-
-        limit = min(query_req.limit, 10_000)
-        offset = max(query_req.offset, 0)
-        # Fetch limit+1 rows to detect whether more pages exist without a COUNT(*)
-        wrapped_sql = (
-            f"SELECT * FROM ({query_req.sql}) __q"
-            f" LIMIT {limit + 1} OFFSET {offset}"
-        )
-
-        start = time.time()
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(executor.execute_query, wrapped_sql)
-            try:
-                result_df = future.result(timeout=QUERY_TIMEOUT_SECONDS)
-            except FuturesTimeout:
-                raise HTTPException(
-                    status_code=504,
-                    detail=f"Query timed out after {QUERY_TIMEOUT_SECONDS}s.",
-                )
-        elapsed_ms = (time.time() - start) * 1000
-
-        has_more = len(result_df) > limit
-        result_df = result_df.head(limit)
-
-        records = _make_json_serializable(result_df.to_dict(orient="records"))
-        from app.utils.query_tracker import increment_query_count
-        for table_name in referenced_tables:
-            await increment_query_count(
-                session=session,
-                table_name=f"silver_{table_name}",
-                user_id=current_user.user_id,
-            )
-        return QueryResponse(
-            columns=list(result_df.columns),
-            data=records,
-            row_count=len(records),
-            offset=offset,
-            has_more=has_more,
-            execution_time_ms=elapsed_ms,
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("SQL query execution failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail=f"Query failed: {str(e)}")
+    for layer, table_name in prepared.tables:
+        await increment_query_count(db=db, table_name=f"{layer}_{table_name}", user_id=current_user.user_id)
+    return QueryResponse(
+        columns=page.columns,
+        data=_make_json_serializable(page.rows),
+        row_count=len(page.rows),
+        offset=offset,
+        has_more=offset + len(page.rows) < (page.total_rows or 0),
+        execution_time_ms=elapsed_ms,
+    )
 
 
 @router.get("/export/{table}", tags=["data"])
@@ -869,60 +679,44 @@ async def export_table(
     table: str,
     format: str = "csv",
     current_user: AuthenticatedUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
 ):
-    """Stream a full silver table as CSV or Parquet via DuckDB Iceberg scan.
+    """Stream a full silver table as CSV or Parquet, read from BigQuery without a query.
 
-    Regular users can export any silver table with no row limit.
-    Admin users can export any table.
+    Any user can export any silver table with no row limit, within the API's daily export budget.
     Pass `?format=parquet` to receive a Parquet file instead of CSV.
     """
     if format not in ("csv", "parquet"):
         raise HTTPException(status_code=400, detail="format must be 'csv' or 'parquet'.")
+    await verify_table_access("silver", table, db, current_user)
 
-    if not current_user.is_admin:
-        await verify_table_access("silver", table, session, current_user)
-
-    settings = get_settings()
-    table_path = settings.get_silver_path(table)
-    metadata_path = await resolve_metadata_path(
-        session,
-        layer="silver",
-        table_name=table,
-        table_path=table_path,
-    )
-    if not metadata_path:
-        raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
-
-    logger.info(
-        "Export table resolution: table=%s table_path=%s metadata_path=%s",
-        table,
-        table_path,
-        metadata_path,
-    )
-    s3_config = _build_s3_config(settings)
-    executor = get_sql_executor()
     try:
-        executor.register_iceberg_view(table, metadata_path, s3_config)
-
-        if format == "parquet":
-            data = executor.export_to_parquet(table)
-            return StreamingResponse(
-                io.BytesIO(data),
-                media_type="application/octet-stream",
-                headers={"Content-Disposition": f"attachment; filename={table}.parquet"},
-            )
-
-        return StreamingResponse(
-            executor.export_to_csv_chunks(table),
-            media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename={table}.csv"},
-        )
-    except HTTPException:
-        raise
+        bq_table = await asyncio.to_thread(bigquery_ops.get_table, "silver", table)
     except Exception as e:
         logger.error("Export failed for table %s: %s", table, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to export table: {str(e)}")
+    if bq_table is None:
+        raise HTTPException(status_code=404, detail=f"Table '{table}' not found.")
+
+    await _ensure_within_budget(db, EXPORT_BYTES, get_settings().export_daily_bytes_budget, "export")
+    try:
+        schema, batches = await asyncio.to_thread(bigquery_ops.table_batches, bq_table)
+    except Exception as e:
+        logger.error("Export failed for table %s: %s", table, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to export table: {str(e)}")
+    await usage_repo.add(db, EXPORT_BYTES, bq_table.num_bytes or 0)
+
+    if format == "parquet":
+        return StreamingResponse(
+            bigquery_ops.parquet_chunks(schema, batches),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f"attachment; filename={table}.parquet"},
+        )
+    return StreamingResponse(
+        bigquery_ops.csv_chunks(schema, batches),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={table}.csv"},
+    )
 
 
 @router.post("/catalog/refresh", response_model=CatalogueRefreshResponse)
@@ -930,32 +724,32 @@ async def export_table(
 async def refresh_catalogue(
     request: Request,
     user_id: str = Depends(verify_api_key_or_admin),
-    session: AsyncSession = Depends(get_db)
+    db: firestore.AsyncClient = Depends(get_db)
 ):
-    """Reload the silver catalogue from the PostgreSQL data_catalogue document.
+    """Reload the silver catalogue from the Firestore data_catalogue collection.
 
     The pipeline project (dbt + manifest loader) is the single source of truth —
     it writes descriptions, tags, schema, preview and row_count after each run.
-    This endpoint reads the current document, stamps last_synced, and returns the
-    number of tables now visible in the catalogue. The updated count is immediately
-    reflected in GET /catalog/silver since that endpoint reads directly from Postgres.
-    No S3 reads, no YAML reads. Completes in < 1 s.
+    This endpoint drops this instance's catalogue cache, stamps last_synced on the
+    meta document, and returns the number of tables now visible in the catalogue.
+    No BigQuery reads, no YAML reads. Completes in < 1 s.
     """
     try:
         from datetime import datetime, timezone
 
-        existing_doc = await catalogue_repo.get_meta_row(session)
+        catalogue_repo.invalidate_cache()
+        existing_doc = await catalogue_repo.get_meta_row(db)
         if not existing_doc:
             raise HTTPException(
                 status_code=404,
-                detail=f"No {CATALOGUE_META_ID} document found in PostgreSQL. Run the pipeline first.",
+                detail=f"No {CATALOGUE_META_ID} document found in Firestore. Run the pipeline first.",
             )
 
         sync_time = datetime.now(timezone.utc)
         existing_doc["catalog_generated_at"] = sync_time.isoformat()
-        await catalogue_repo.upsert_meta_row(session, existing_doc)
+        await catalogue_repo.upsert_meta_row(db, existing_doc)
 
-        num_tables = len(await load_silver_catalog_rows(session))
+        num_tables = len(await load_silver_catalog_rows(db))
         logger.info("Catalogue refreshed: %d tables, last_synced=%s", num_tables, sync_time.isoformat())
 
         return CatalogueRefreshResponse(

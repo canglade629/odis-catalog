@@ -103,7 +103,9 @@ if not secrets.compare_digest(credentials.credentials, settings.admin_secret):  
 
 ```bash
 # Storage & DB (see env.template)
-# SCW_* for Scaleway S3, PG_DB_* or DATABASE_URL for PostgreSQL
+GCP_PROJECT_ID=odis-stream2-app
+BIGQUERY_DATASET_PREFIX=odas
+FIRESTORE_DATABASE=(default)
 
 # Security (required)
 ADMIN_SECRET=<generate-with-secrets-module>
@@ -130,9 +132,9 @@ curl -H "Authorization: Bearer YOUR_ADMIN_SECRET" \
 
 ### Production Deploy:
 ```bash
-# 1. Set ADMIN_SECRET (and DB/S3 vars) in your deployment platform (e.g. Coolify env vars)
-# 2. Set CORS_ORIGINS to your front-end domain(s)
-# 3. Deploy via Docker/Coolify (see README)
+# 1. Store ADMIN_SECRET in Secret Manager; set datasets/CORS on the Cloud Build trigger substitutions
+# 2. Set CORS_ORIGINS to your front-end domain(s) if the API is called cross-origin
+# 3. Push to main: the Cloud Build trigger tests, builds and deploys to Cloud Run (see README)
 ```
 
 ---
@@ -217,7 +219,7 @@ curl -H "Origin: https://yourdomain.com" -v \
 
 ### Watch for Security Events
 
-Use your deployment platform's log viewer (e.g. Coolify logs) to filter for:
+Use Cloud Logging (Cloud Run service logs) to filter for:
 - Authentication failures: `Invalid admin secret`, `Invalid API key`
 - Rate limit violations: `Rate limit exceeded`
 - Startup: `ADMIN_SECRET`, `CORS`

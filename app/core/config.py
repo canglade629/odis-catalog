@@ -7,21 +7,18 @@ from typing import Optional, List
 class Settings(BaseSettings):
     """Application settings."""
 
-    # Scaleway S3 (primary storage)
-    scw_object_storage_endpoint: str = "https://s3.fr-par.scw.cloud"
-    scw_region: str = "fr-par"
-    scw_bucket_name: str = "odis-s3"
-    scw_access_key: str = ""
-    scw_secret_key: str = ""
-    
-    # PostgreSQL
-    pg_db_host: Optional[str] = None
-    pg_db_port: Optional[int] = None
-    pg_db_name: Optional[str] = None
-    pg_db_user: Optional[str] = None
-    pg_db_pwd: Optional[str] = None
-    database_url: Optional[str] = None  # Overrides PG_* if set
-    
+    # Google Cloud
+    gcp_project_id: Optional[str] = None  # Defaults to the project of the runtime credentials
+    firestore_database: str = "(default)"  # Only the (default) database gets the Firestore free quota
+    # The layers are the BigQuery datasets <prefix>_bronze, <prefix>_silver and <prefix>_gold
+    bigquery_dataset_prefix: str = "odas"
+    bigquery_location: str = "europe-west1"
+    # Caps on what the API may spend, shared by every user: BigQuery bills the bytes a query processes
+    # (1 TiB free per month and billing account), exports are billed as outbound data transfer
+    query_max_bytes_billed: int = 5 * 1024**3
+    query_daily_bytes_budget: int = 20 * 1024**3
+    export_daily_bytes_budget: int = 5 * 1024**3
+
     # API Configuration
     admin_secret: str  # No default - must be explicitly set
     environment: str = "development"
@@ -78,81 +75,7 @@ class Settings(BaseSettings):
         # Split comma-separated origins and strip whitespace
         origins = [origin.strip() for origin in self.cors_origins.split(",")]
         return [origin for origin in origins if origin]  # Filter empty strings
-    
-    def _get_database_url(self) -> str:
-        """Build async PostgreSQL URL from PG_* or use DATABASE_URL."""
-        if self.database_url:
-            url = self.database_url
-            if url.startswith("postgresql://"):
-                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-            elif not url.startswith("postgresql+asyncpg://"):
-                url = f"postgresql+asyncpg://{url.split('://', 1)[-1]}"
-            return url
-        if self.pg_db_host and self.pg_db_name and self.pg_db_user and self.pg_db_pwd is not None:
-            port = self.pg_db_port or 5432
-            from urllib.parse import quote_plus
-            pwd = quote_plus(self.pg_db_pwd)
-            return f"postgresql+asyncpg://{self.pg_db_user}:{pwd}@{self.pg_db_host}:{port}/{self.pg_db_name}"
-        raise ValueError("Set DATABASE_URL or PG_DB_HOST, PG_DB_NAME, PG_DB_USER, PG_DB_PWD")
 
-    @property
-    def resolved_database_url(self) -> str:
-        """Resolved async database URL for SQLAlchemy (postgresql+asyncpg://)."""
-        return self._get_database_url()
-
-    @property
-    def sync_database_url(self) -> str:
-        """Sync database URL for use in background threads (postgresql://)."""
-        url = self.resolved_database_url
-        if "+asyncpg" in url:
-            url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
-        return url
-
-    @property
-    def s3_bucket_url(self) -> str:
-        """Full S3 bucket URL (Scaleway)."""
-        return f"s3://{self.scw_bucket_name}"
-
-    @property
-    def raw_path(self) -> str:
-        """Path to raw data in S3."""
-        return f"{self.s3_bucket_url}/raw"
-
-    @property
-    def bronze_path(self) -> str:
-        """Path to bronze (Iceberg) layer in S3."""
-        return f"{self.s3_bucket_url}/bronze"
-
-    @property
-    def silver_path(self) -> str:
-        """Path to silver (Iceberg) layer in S3."""
-        return f"{self.s3_bucket_url}/silver"
-
-    @property
-    def gold_path(self) -> str:
-        """Path to gold layer in S3."""
-        return f"{self.s3_bucket_url}/gold"
-
-    @property
-    def delta_path(self) -> str:
-        """Alias: base path for Delta tables (bronze)."""
-        return self.bronze_path
-
-    def get_raw_path(self, domain: str) -> str:
-        """Get path to raw data for a specific domain."""
-        return f"{self.raw_path}/{domain}"
-
-    def get_bronze_path(self, table: str) -> str:
-        """Get path to bronze Iceberg table on S3."""
-        return f"{self.bronze_path}/{table}.iceberg"
-
-    def get_silver_path(self, table: str) -> str:
-        """Get path to silver Iceberg table on S3."""
-        return f"{self.silver_path}/{table}.iceberg"
-
-    def get_gold_path(self, table: str) -> str:
-        """Get path to gold table."""
-        return f"{self.gold_path}/{table}"
 
 @lru_cache()
 def get_settings() -> Settings:

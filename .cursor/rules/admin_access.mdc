@@ -3,6 +3,6 @@ alwaysApply: true
 ---
 
 
-To access all data for dev purpose. Use the admin API key: Q1bIU50vQUQqr502IN12fQzMYeE-q9R3EE9-5s6I84U
+To access all data for dev purpose, authenticate as admin with `ADMIN_SECRET` as the bearer token. On ODAS (Cloud Run), read it with `gcloud secrets versions access latest --secret=ODAS_ADMIN_SECRET --project=odis-stream2-app`; locally it is `ADMIN_SECRET` in `.env`. This repository is public: never write secret values in tracked files.
 
 Only an admin can run pipeline and have full access to the app features.

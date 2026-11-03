@@ -1,10 +1,10 @@
 ---
 alwaysApply: true
 ---
-Deploy the frontend and backend API together as a single service on Coolify.
+The platform is ODAS (Open Data Accueil Solidaire). Deploy the frontend and backend API together as the single Cloud Run service `odas-app` in the shared GCP project `odis-stream2-app` (`europe-west1`).
 
-Do not use Cloud Run, Cloud Build, or Terraform for deployments in this repository.
+Deployments go through `cloudbuild.yaml` (tests, image build, push to the shared Artifact Registry repository `odis-stream2-repo`, `gcloud run deploy`), run as the CI account `odis-ci`: by the Cloud Build GitHub trigger on `main`, or by hand with `gcloud builds submit` (README "Deployment"). The service runs as `odas-run`. Do not use Terraform or Coolify.
 
-Build Docker images locally, then deploy through the existing Coolify workflow.
+The app runtime uses BigQuery (datasets `odas_bronze`, `odas_silver`, `odas_gold` in `europe-west1`) + Firestore (API keys, catalogue, certifications, query counters, daily usage), with the `(default)` Firestore database to stay in the free tier. Keep BigQuery spending capped: queries run with `maximum_bytes_billed` and count against the daily budgets of `app/core/config.py`.
 
-The app runtime uses Scaleway S3 + PostgreSQL (Coolify-managed infrastructure).
+Resource names are Cloud Build substitutions. Do not create or modify GCP resources unless the user explicitly asks, and never touch the resources of the other app in the project (`odis-app`, `odis-app-staging`, their buckets, secrets and BigQuery datasets `odis_logs`, `rna_rag`).

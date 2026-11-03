@@ -1,3 +1,4 @@
--r requirements.txt
-dbt-core>=1.7.0,<3
-dbt-duckdb>=1.4.0
+-r requirements-test.txt
+# Only for the copies from the legacy stack (scripts/migrate_postgres_to_firestore.py, scripts/copy_tables_to_bigquery.py)
+psycopg2-binary
+pyiceberg[pyarrow]==0.11.1

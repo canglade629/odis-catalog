@@ -223,8 +223,7 @@ These endpoints now respect certification status:
 - Table does not exist in registry
 
 ### 500 Internal Server Error
-- Database connection issues
-- PostgreSQL/database errors
+- Firestore connection or permission errors
 - Unexpected errors
 
 ---

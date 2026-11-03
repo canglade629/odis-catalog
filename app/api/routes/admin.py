@@ -1,14 +1,14 @@
-"""Admin API routes for managing API keys (PostgreSQL-backed)."""
+"""Admin API routes for managing API keys (Firestore-backed)."""
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from google.cloud import firestore
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import logging
 from pathlib import Path
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import verify_admin_secret_or_admin_key, verify_api_key_or_admin
-from app.db.session import get_db
+from app.db.firestore import get_db
 from app.db.repositories.catalogue import catalogue_repo, CATALOGUE_META_ID
 from app.core.rate_limiter import limiter
 from app.core.api_key_manager import (
@@ -23,8 +23,7 @@ from app.core.certification_manager import (
     get_certification_status,
     get_all_certifications
 )
-from app.core.config import get_settings
-from app.utils.iceberg_ops import invalidate_metadata_cache
+from app.utils.bigquery_ops import LAYERS, dataset_id, invalidate_table_names
 
 logger = logging.getLogger(__name__)
 
@@ -120,11 +119,11 @@ class RuntimeCacheInvalidateResponse(BaseModel):
 async def create_new_api_key(
     request: Request,
     api_key_request: CreateAPIKeyRequest,
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
 ):
     """Create a new API key for a user. By default read-only; set is_admin=True for admin access. Requires admin authentication."""
     result = await create_api_key(
-        api_key_request.user_id, session, is_admin=api_key_request.is_admin
+        api_key_request.user_id, db, is_admin=api_key_request.is_admin
     )
     return CreateAPIKeyResponse(
         api_key=result["api_key"],
@@ -139,10 +138,10 @@ async def create_new_api_key(
 async def revoke_existing_api_key(
     request: Request,
     revoke_request: RevokeAPIKeyRequest,
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
 ):
     """Revoke an API key (soft delete - sets active=False). Requires admin."""
-    success = await revoke_api_key(revoke_request.api_key, session)
+    success = await revoke_api_key(revoke_request.api_key, db)
     
     if not success:
         raise HTTPException(
@@ -158,10 +157,10 @@ async def revoke_existing_api_key(
 async def delete_existing_api_key(
     request: Request,
     delete_request: DeleteAPIKeyRequest,
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
 ):
     """Permanently delete an API key. Requires admin authentication."""
-    success = await delete_api_key(delete_request.api_key, session)
+    success = await delete_api_key(delete_request.api_key, db)
     
     if not success:
         raise HTTPException(
@@ -176,7 +175,7 @@ async def delete_existing_api_key(
 @limiter.limit("100/hour")
 async def list_all_api_keys(
     request: Request,
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
 ):
     """
     List all API keys (without plaintext keys).
@@ -184,12 +183,12 @@ async def list_all_api_keys(
     Requires admin authentication via ADMIN_SECRET.
     
     Args:
-        db: Database session (PostgreSQL)
+        db: Firestore client
         
     Returns:
         List of API key metadata
     """
-    keys = await list_api_keys(session)
+    keys = await list_api_keys(db)
     return keys
 
 
@@ -198,7 +197,7 @@ async def list_all_api_keys(
 async def certify_table_endpoint(
     request: Request,
     certify_request: CertifyTableRequest,
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
     admin_verified: bool = Depends(verify_admin_secret_or_admin_key)
 ):
     """
@@ -208,7 +207,7 @@ async def certify_table_endpoint(
     
     Args:
         request: Contains table_name and layer
-        db: Database session (PostgreSQL)
+        db: Firestore client
         admin_verified: Admin authentication status
         
     Returns:
@@ -219,7 +218,7 @@ async def certify_table_endpoint(
             certify_request.layer,
             certify_request.table_name,
             "admin",
-            session,
+            db,
         )
         
         return CertificationResponse(**result)
@@ -235,7 +234,7 @@ async def certify_table_endpoint(
 async def uncertify_table_endpoint(
     request: Request,
     uncertify_request: UncertifyTableRequest,
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
     admin_verified: bool = Depends(verify_admin_secret_or_admin_key)
 ):
     """
@@ -245,7 +244,7 @@ async def uncertify_table_endpoint(
     
     Args:
         request: Contains table_name and layer
-        db: Database session (PostgreSQL)
+        db: Firestore client
         admin_verified: Admin authentication status
         
     Returns:
@@ -255,7 +254,7 @@ async def uncertify_table_endpoint(
         success = await uncertify_table(
             uncertify_request.layer,
             uncertify_request.table_name,
-            session,
+            db,
         )
         
         if success:
@@ -280,7 +279,7 @@ async def uncertify_table_endpoint(
 @limiter.limit("100/hour")
 async def list_table_certifications(
     request: Request,
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
     admin_verified: bool = Depends(verify_admin_secret_or_admin_key)
 ):
     """
@@ -289,14 +288,14 @@ async def list_table_certifications(
     Requires admin authentication via ADMIN_SECRET.
     
     Args:
-        db: Database session (PostgreSQL)
+        db: Firestore client
         admin_verified: Admin authentication status
         
     Returns:
         List of all certification statuses
     """
     try:
-        certifications = await get_all_certifications(session)
+        certifications = await get_all_certifications(db)
         return {"certifications": certifications}
     except Exception as e:
         raise HTTPException(
@@ -310,31 +309,32 @@ async def list_table_certifications(
 async def refresh_catalogue(
     request: Request,
     user_id: str = Depends(verify_api_key_or_admin),
-    session: AsyncSession = Depends(get_db),
+    db: firestore.AsyncClient = Depends(get_db),
 ):
-    """Refresh the catalogue view from the PostgreSQL document written by the pipeline.
+    """Refresh the catalogue view from the Firestore documents written by the pipeline.
 
     The pipeline project (dbt + manifest loader) is the single source of truth:
     it writes descriptions, examples, schema, preview and row_count into the
-    data_catalogue table.  This endpoint simply reads that document, stamps a
-    new last_synced timestamp, and writes it back so the UI picks up the latest
-    data without any S3 or YAML reads.
+    data_catalogue collection.  This endpoint drops this instance's catalogue cache,
+    re-reads the meta document, stamps a new last_synced timestamp, and writes it
+    back so the UI picks up the latest data without any GCS or YAML reads.
     """
     try:
         from datetime import datetime, timezone
 
-        existing_doc = await catalogue_repo.get_meta_row(session)
+        catalogue_repo.invalidate_cache()
+        existing_doc = await catalogue_repo.get_meta_row(db)
         if not existing_doc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No {CATALOGUE_META_ID} document found in PostgreSQL. Run the pipeline first.",
+                detail=f"No {CATALOGUE_META_ID} document found in Firestore. Run the pipeline first.",
             )
 
         sync_time = datetime.now(timezone.utc)
         existing_doc["catalog_generated_at"] = sync_time.isoformat()
-        await catalogue_repo.upsert_meta_row(session, existing_doc)
+        await catalogue_repo.upsert_meta_row(db, existing_doc)
 
-        num_tables = len(await catalogue_repo.list_table_rows(session))
+        num_tables = len(await catalogue_repo.list_table_rows(db))
         logger.info("Catalogue refreshed: %d tables, last_synced=%s", num_tables, sync_time.isoformat())
 
         return CatalogueRefreshResponse(
@@ -354,73 +354,42 @@ async def refresh_catalogue(
         )
 
 
-@router.get("/debug/s3-ls")
-@limiter.limit("10/hour")
-async def debug_s3_ls(
-    request: Request,
-    prefix: str = "silver/",
-    user_id: str = Depends(verify_api_key_or_admin),
-):
-    """List S3 objects under a prefix (admin debug)."""
-    from app.utils.s3_ops import get_s3_operations
-    from app.core.config import get_settings
-    s3 = get_s3_operations()
-    settings = get_settings()
-    full_prefix = f"s3://{settings.scw_bucket_name}/{prefix.lstrip('/')}"
-    files = s3.list_files(full_prefix)
-    return {"prefix": full_prefix, "count": len(files), "files": files[:100]}
-
-
 @router.post("/runtime-cache/invalidate", response_model=RuntimeCacheInvalidateResponse)
 @limiter.limit("30/hour")
 async def invalidate_runtime_cache(
     request: Request,
     payload: RuntimeCacheInvalidateRequest,
 ):
-    """Invalidate runtime Iceberg metadata cache used by SQL query endpoints."""
-    try:
-        if payload.all:
-            invalidate_metadata_cache()
-            return RuntimeCacheInvalidateResponse(
-                status="success",
-                scope="all",
-                table_path=None,
-                message="Runtime metadata cache invalidated for all tables.",
-            )
+    """Drop this instance's cached BigQuery table listings and Firestore catalogue.
 
-        if not payload.table_name:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="table_name is required when all=false",
-            )
+    The caches are per layer, so the whole cache is dropped even when a single table is named.
+    """
+    if not payload.all and not payload.table_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="table_name is required when all=false",
+        )
+    layer = (payload.layer or "silver").lower()
+    if not payload.all and layer not in LAYERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="layer must be one of: bronze, silver, gold",
+        )
 
-        layer = (payload.layer or "silver").lower()
-        settings = get_settings()
-        if layer == "silver":
-            table_path = settings.get_silver_path(payload.table_name)
-        elif layer == "bronze":
-            table_path = settings.get_bronze_path(payload.table_name)
-        elif layer == "gold":
-            table_path = settings.get_gold_path(payload.table_name)
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="layer must be one of: bronze, silver, gold",
-            )
-
-        invalidate_metadata_cache(table_path)
+    invalidate_table_names()
+    catalogue_repo.invalidate_cache()
+    if payload.all:
         return RuntimeCacheInvalidateResponse(
             status="success",
-            scope="table",
-            table_path=table_path,
-            message=f"Runtime metadata cache invalidated for {layer}.{payload.table_name}.",
+            scope="all",
+            table_path=None,
+            message="Runtime cache invalidated for all tables.",
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to invalidate runtime metadata cache: %s", e, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to invalidate runtime metadata cache: {str(e)}",
-        )
+    table_path = f"{dataset_id(layer)}.{payload.table_name}"
+    return RuntimeCacheInvalidateResponse(
+        status="success",
+        scope="table",
+        table_path=table_path,
+        message=f"Runtime cache invalidated for {table_path}.",
+    )
 

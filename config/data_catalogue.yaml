@@ -64,7 +64,7 @@ tables:
     row_count: 0
     sources:
       - name: "Pipeline DBT externe"
-        description: "Métadonnées publiées par le projet DBT externe dans PostgreSQL."
+        description: "Métadonnées publiées par le projet DBT externe dans Firestore."
     fields:
       capacity:
         type: integer

@@ -1,44 +1,47 @@
-"""Query tracker repository (PostgreSQL)."""
-from datetime import datetime
-from typing import Optional
+"""Query tracker repository (Firestore collection `query_tracker`, one document per table).
 
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
+Each document holds the table total plus a `users` map of per-user counters, so listing
+counts for the whole catalogue is a single collection read.
+"""
+from typing import Dict
 
-from app.db.models import QueryTracker
+from google.cloud import firestore
+
+COLLECTION = "query_tracker"
+
+
+def _count(data: Dict) -> int:
+    return int(data.get("query_count") or 0)
 
 
 class QueryTrackerRepository:
-    async def increment(self, session: AsyncSession, table_name: str, user_id: str) -> None:
-        result = await session.execute(
-            select(QueryTracker).where(
-                QueryTracker.table_name == table_name,
-                QueryTracker.user_id == user_id,
-            )
+    async def increment(self, db: firestore.AsyncClient, table_name: str, user_id: str) -> None:
+        await db.collection(COLLECTION).document(table_name).set(
+            {
+                "table_name": table_name,
+                "query_count": firestore.Increment(1),
+                "last_query_at": firestore.SERVER_TIMESTAMP,
+                "users": {
+                    user_id: {
+                        "query_count": firestore.Increment(1),
+                        "last_query_at": firestore.SERVER_TIMESTAMP,
+                    }
+                },
+            },
+            merge=True,
         )
-        row = result.scalars().first()
-        now = datetime.utcnow()
-        if row:
-            row.query_count += 1
-            row.last_query_at = now
-        else:
-            session.add(
-                QueryTracker(
-                    table_name=table_name,
-                    user_id=user_id,
-                    query_count=1,
-                    last_query_at=now,
-                )
-            )
-        await session.flush()
 
-    async def get_table_total(self, session: AsyncSession, table_name: str) -> int:
-        result = await session.execute(
-            select(func.coalesce(func.sum(QueryTracker.query_count), 0)).where(
-                QueryTracker.table_name == table_name
-            )
-        )
-        return int(result.scalar() or 0)
+    async def get_table_total(self, db: firestore.AsyncClient, table_name: str) -> int:
+        snapshot = await db.collection(COLLECTION).document(table_name).get()
+        if not snapshot.exists:
+            return 0
+        return _count(snapshot.to_dict() or {})
+
+    async def get_all_totals(self, db: firestore.AsyncClient) -> Dict[str, int]:
+        return {
+            snapshot.id: _count(snapshot.to_dict() or {})
+            async for snapshot in db.collection(COLLECTION).stream()
+        }
 
 
 query_tracker_repo = QueryTrackerRepository()

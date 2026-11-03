@@ -159,9 +159,9 @@ curl -X POST https://odace.services.d4g.fr/admin/tables/certify \
 
 ## Security Model
 
-1. **API Keys** are stored in PostgreSQL with hashed values
-2. **Admin Secret** is set via environment (e.g. Coolify env vars)
-3. **Table Certifications** are stored in PostgreSQL
+1. **API Keys** are stored in Firestore with hashed values
+2. **Admin Secret** is injected from Secret Manager into the Cloud Run service (`.env` locally)
+3. **Table Certifications** are stored in Firestore
 4. All authenticated endpoints use rate limiting (60 requests/minute)
 5. Regular users are isolated from:
    - Pipeline execution (prevent resource exhaustion)
