@@ -211,6 +211,11 @@ def test_query_errors(client, fake_bq):
     assert too_big.status_code == 400
     assert "more than 5 GiB" in too_big.json()["detail"]
 
+    fake_bq.query_error = google_exceptions.Forbidden("User does not have bigquery.jobs.create permission")
+    refused = client.post("/api/data/query", json={"sql": "SELECT * FROM dim_test"}, headers=ADMIN_HEADERS)
+    assert refused.status_code == 503
+    assert refused.json()["detail"] == "The query service is unavailable; try again later."
+
 
 def test_table_metadata_endpoint(client, fake_bq):
     fake_bq.add_table("odas_silver", "dim_test", TOWNS)

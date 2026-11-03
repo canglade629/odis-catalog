@@ -71,6 +71,9 @@ async def _run_billed_query(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except (google_exceptions.BadRequest, google_exceptions.NotFound) as exc:
         raise HTTPException(status_code=400, detail=f"Query failed: {exc.message}") from exc
+    except google_exceptions.GoogleAPICallError as exc:
+        logger.error("BigQuery could not run the %s query: %s", endpoint, exc)
+        raise HTTPException(status_code=503, detail="The query service is unavailable; try again later.") from exc
     if page.bytes_billed:
         await usage_repo.add(db, QUERY_BYTES_BILLED, page.bytes_billed)
     return page
